@@ -37,7 +37,7 @@ declare SOURCE_DIR="${SOURCE_DIR:-}" # Use existing value, or default to "".
 
 # GitHub metadata constants
 declare REPO_ORG="${REPO_ORG:-lbussy}"
-declare REPO_NAME="${REPO_NAME:-ap-pop}"
+declare REPO_NAME="${REPO_NAME:-ap-popup}"
 declare REPO_BRANCH="${REPO_BRANCH:-main}"
 declare SEM_VER="${SEM_VER:-1.0.0}"
 
@@ -1262,32 +1262,32 @@ update_wifi_profile() {
     local existing_profile=""
     local connection_status=""
 
-    echo -e "\nConfiguring WiFi network: ${FGYLW}${ssid}${RESET}"
+    printf "\nConfiguring WiFi network: %s%s%s\n" "${FGYLW}" "${ssid}" "${RESET}"
 
     # Check if a profile already exists for this SSID
     existing_profile=$(nmcli -t -f NAME con show | grep -F "$ssid")
 
     if [ -n "$existing_profile" ]; then
         # Existing profile found
-        echo "An existing profile for this SSID was found: $existing_profile"
-        echo -e "${FGYLW}Enter the new password for the network (or press Enter to skip updating):${RESET}"
+        printf "An existing profile for this SSID was found: %s\n" "$existing_profile"
+        printf "%sEnter the new password for the network (or press Enter to skip updating):%s\n" "${FGYLW}" "${RESET}"
         read -r password < /dev/tty
 
         if [ -n "$password" ] && [ "${#password}" -ge 8 ]; then
             nmcli connection modify "$existing_profile" wifi-sec.psk "$password"
-            echo "Password updated. Attempting to connect to $existing_profile..."
+            printf "Password updated. Attempting to connect to %s...\n" "$existing_profile"
             connection_status=$(nmcli device wifi connect "$existing_profile" 2>&1)
             if [ $? -eq 0 ]; then
-                echo "Successfully connected to $ssid."
+                printf "Successfully connected to %s.\n" "$ssid"
             else
-                echo "Failed to connect to $ssid. Error: $connection_status"
+                printf "Failed to connect to %s. Error: %s\n" "$ssid" "$connection_status"
                 nmcli connection delete "$existing_profile" >/dev/null 2>&1
-                echo "The profile has been deleted. Please try again."
+                printf "The profile has been deleted. Please try again.\n"
             fi
         elif [ -n "$password" ]; then
-            echo "Password must be at least 8 characters. No changes were made."
+            printf "Password must be at least 8 characters. No changes were made.\n"
         else
-            echo "No password entered. Keeping the existing configuration."
+            printf "No password entered. Keeping the existing configuration.\n"
         fi
     else
         # No existing profile found, create a new one
@@ -1866,25 +1866,25 @@ download_files_from_directories() {
     local temp_dir
     temp_dir=$(mktemp -d)
 
-    echo "Temporary directory: $temp_dir"
-    echo "Fetching repository tree..."
+    logI "Temporary directory: $temp_dir"
+    logI "Fetching repository tree."
 
     local tree
     tree=$(fetch_tree)
 
     if [[ $(echo "$tree" | jq '.tree | length') -eq 0 ]]; then
-        echo "Failed to fetch repository tree. Check repository details or ensure it is public."
+        die 1 "Failed to fetch repository tree." "Check repository details or ensure it is public."
         exit 1
     fi
 
     for dir in "${DIRECTORIES[@]}"; do
-        echo "Processing directory: $dir"
+        logI "Processing directory: $dir"
 
         local files
         files=$(echo "$tree" | jq -r --arg TARGET_DIR "$dir/" '.tree[] | select(.type=="blob" and (.path | startswith($TARGET_DIR))) | .path')
 
         if [[ -z "$files" ]]; then
-            echo "No files found in directory: $dir"
+            logI "No files found in directory: $dir"
             continue
         fi
 
@@ -1892,14 +1892,14 @@ download_files_from_directories() {
         mkdir -p "$dest_dir"
 
         echo "$files" | while read -r file; do
-            echo "Downloading: $file"
+            logI "Downloading: $file"
             download_file "$file" "$dest_dir"
         done
 
-        echo "Files from $dir downloaded to: $dest_dir"
+        logI "Files from $dir downloaded to: $dest_dir"
     done
 
-    echo "All specified directories processed. Temporary files saved in: $temp_dir"
+    logI "All specified directories processed. Temporary files saved in: $temp_dir"
 }
 
 exit_controller() {
