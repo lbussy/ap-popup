@@ -3,6 +3,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # TODO:
+#   - Get rid of echoes
 #   - If piped, curl the remainder of the files
 #   - Examine: declare -ar SYSTEM_READS=()
 #   - Figure out:
@@ -42,10 +43,8 @@ declare REPO_BRANCH="${REPO_BRANCH:-main}"
 declare SEM_VER="${SEM_VER:-1.0.0}"
 
 # GithHub curl info
-DIRECTORIES=("man" "src" "conf")  # Replace with your directories
-USER_HOME=$(eval echo "~$(echo $SUDO_USER)")
-# TODO: DEST_ROOT="$USER_HOME/$REPO_NAME"       # Replace with your desired destination root directory
-DEST_ROOT="$USER_HOME/apppop"       # Replace with your desired destination root directory
+readonly DIRECTORIES=("man" "src" "conf")  # Replace with your directories
+readonly USER_HOME=$(eval echo "~$(echo $SUDO_USER)")
 
 # Installer name.
 declare THIS_SCRIPT="${THIS_SCRIPT:-apconfig.sh}" # Use existing value, or default to "apconfig.sh".
@@ -1346,9 +1345,6 @@ install_appop_script() {
 check_config_file() {
 
     if [ ! -f "$CONFIG_FILE" ]; then
-        echo $(pwd) # DEBUG
-        echo "../conf/$CONFIG_FILE"
-        pause       # DEBUG
         if [ -f "$SOURCE_DIR/$SCRIPT_NAME.conf" ]; then
             logI "Creating default configuration file at $CONFIG_FILE."
             exec_command "Installing default configuration" "cp \"$SCRIPT_NAME.conf\" \"../conf/$CONFIG_FILE\""
@@ -1863,10 +1859,8 @@ download_file() {
 
 # Main function to list and download files from specified directories
 download_files_from_directories() {
-    local temp_dir
-    temp_dir=$(mktemp -d)
-
-    logI "Temporary directory: $temp_dir"
+    # TODO: local dest_root="$USER_HOME/$REPO_NAME"       # Replace with your desired destination root directory
+    local dest_root="$USER_HOME/apppop"       # Replace with your desired destination root directory
     logI "Fetching repository tree."
 
     local tree
@@ -1888,7 +1882,7 @@ download_files_from_directories() {
             continue
         fi
 
-        local dest_dir="$DEST_ROOT/$dir"
+        local dest_dir="$dest_root/$dir"
         mkdir -p "$dest_dir"
 
         echo "$files" | while read -r file; do
@@ -1899,7 +1893,121 @@ download_files_from_directories() {
         logI "Files from $dir downloaded to: $dest_dir"
     done
 
-    logI "All specified directories processed. Temporary files saved in: $temp_dir"
+    logI "Files saved in: $dest_root"
+    update_directory_and_files "$dest_root"
+}
+
+# Function to update ownership and permissions for a single file
+update_file() {
+    local file="$1"
+    local home_root="$2"
+
+    # Check if both parameters are provided
+    if [[ -z "$file" || -z "$home_root" ]]; then
+        logE "Usage: update_file <file> <home_root>"
+        return 1
+    fi
+
+    # Verify if the home root exists and is a directory
+    if [[ ! -d "$home_root" ]]; then
+        logE "Home root '$home_root' is not a valid directory."
+        return 1
+    fi
+
+    # Verify if the target file exists
+    if [[ ! -f "$file" ]]; then
+        logE "File '$file' does not exist."
+        return 1
+    fi
+
+    # Determine the owner of the home root
+    local owner
+    owner=$(stat -c '%U' "$home_root")
+    if [[ -z "$owner" ]]; then
+        logE "Unable to determine the owner of the home root."
+        return 1
+    fi
+
+    # Change ownership of the file to the determined owner
+    logI "Changing ownership of '$file' to '$owner'..."
+    chown "$owner":"$owner" "$file" || {
+        logE "Failed to change ownership."
+        return 1
+    }
+
+    # Apply permissions
+    if [[ "$file" == *.sh ]]; then
+        logI "Setting permissions of '$file' to 700 (executable)."
+        chmod 700 "$file" || {
+            logE "Failed to set permissions to 700."
+            return 1
+        }
+    else
+        logI "Setting permissions of '$file' to 600."
+        chmod 600 "$file" || {
+            logE "Failed to set permissions to 600."
+            return 1
+        }
+    fi
+
+    logI "Ownership and permissions updated successfully for '$file'."
+    return 0
+}
+
+# Function to update directories and iterate over files
+update_directory_and_files() {
+    local directory="$1"
+    local home_root="$USER_HOME"
+
+    # Check if the target directory is provided
+    if [[ -z "$directory" ]]; then
+        logE "Usage: update_directory_and_files <directory>"
+        return 1
+    fi
+
+    # Verify if the target directory exists
+    if [[ ! -d "$directory" ]]; then
+        logE "Directory '$directory' does not exist."
+        return 1
+    fi
+
+    # Verify if USER_HOME is set and valid
+    if [[ -z "$home_root" || ! -d "$home_root" ]]; then
+        logE "USER_HOME environment variable is not set or points to an invalid directory."
+        return 1
+    fi
+
+    # Determine the owner of the home root
+    local owner
+    owner=$(stat -c '%U' "$home_root")
+    if [[ -z "$owner" ]]; then
+        logE "Unable to determine the owner of the home root."
+        return 1
+    fi
+
+    # Change ownership and permissions of the target directory and subdirectories
+    logI "Changing ownership and permissions of '$directory' tree."
+    find "$directory" -type d -exec chown "$owner":"$owner" {} \; -exec chmod 700 {} \; || {
+        logE "Failed to update ownership or permissions of directories."
+        return 1
+    }
+
+    # Update permissions for non-`.sh` files
+    logI "Setting permissions of non-.sh files to 600 in '$directory'."
+    find "$directory" -type f ! -name "*.sh" -exec chown "$owner":"$owner" {} \; -exec chmod 600 {} \; || {
+        logE "Failed to update permissions of non-.sh files."
+        return 1
+    }
+
+    # Update permissions for `.sh` files
+    logI "Setting permissions of .sh files to 700 in '$directory'."
+    find "$directory" -type f -name "*.sh" -exec chown "$owner":"$owner" {} \; -exec chmod 700 {} \; || {
+        logE "Failed to update permissions of .sh files."
+        return 1
+    }
+
+    logI "Ownership and permissions applied to all files and directories in '$directory'."
+    return 0
 }
 
 exit_controller() {
@@ -1911,7 +2019,7 @@ exit_controller() {
 
 # DEBUG
 pause() {
-    printf "Press any key to continue..."
+    printf "Press any key to continue...\n"
     read -n 1 -t 5 -sr < /dev/tty || true
 }
 
@@ -1941,14 +2049,18 @@ main() {
         local real_script_path
         # Curl installer to local temp_dir
         download_files_from_directories
-        exit
 
         # Resolve the real path of the script
-        real_script_path=$(readlink -f "$DEST_ROOT/src/$THIS_SCRIPT")
+        # TODO: local dest_root="$USER_HOME/$REPO_NAME"       # Replace with your desired destination root directory
+        local dest_root="$USER_HOME/apppop"       # Replace with your desired destination root directory
+        real_script_path=$(readlink -f "$dest_root/src/$THIS_SCRIPT")
+
+        logI "Re-spawning from $real_script_path."
+        sleep 2
         
         # Replace the current running script
+        echo "$real_script_path"
         exec_newshell "Re-spawning after curl" "$real_script_path"
-        # Or, if exec_newshell is a custom function:
     fi
 
     # See if we are in the installed path
