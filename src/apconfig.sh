@@ -32,7 +32,7 @@ declare DRY_RUN="${DRY_RUN:-false}" # Use existing value, or default to "false".
 
 # Semaphore for a re-run after install.
 declare RE_RUN="${RE_RUN:-false}" # Use existing value, or default to "false".
-declare SOURCE_DIR="${SOURCE_DIR:-""}"
+declare SOURCE_DIR="${SOURCE_DIR:-"$(pwd)"}"
 
 # GitHub metadata constants
 declare REPO_ORG="${REPO_ORG:-lbussy}"
@@ -402,10 +402,8 @@ print_version() {
 is_this_piped() {
     # Check if stdin is a pipe
     if [ -p /dev/stdin ]; then
-        echo "DEBUG: Standard input is a pipe."
         return 0
     else
-        echo "DEBUG: Standard input is not a pipe."
         return 1
     fi
 }
@@ -414,10 +412,8 @@ is_this_piped() {
 is_this_curled() {
     # Check if the script is being executed via curl | bash
     if [ -p /dev/stdin ] && ps -o comm= $PPID | grep -q "bash"; then
-        echo "DEBUG: Script is curled."
         return 0
     else
-        echo "DEBUG: Script is not curled."
         return 1
     fi
 }
@@ -717,6 +713,7 @@ setup_log() {
 
 # Execute a command, log its status, and optionally print messages to the console.
 exec_command() {
+    set +e  # Temporarily disable errexit
     local exec_name="${1:-Unnamed Operation}"   # Default to "Unnamed Operation" if $1 is unset
     local exec_process="${2:-true}"             # Default to "true" if $2 is unset (a no-op command)
     local result                                # Store the command's exit status
@@ -725,17 +722,15 @@ exec_command() {
     local fail_prefix="Failed"
     local success_prefix="Finished"
 
-    exec_name="$(remove_dot "$exec_name")"      # Remove tailing perion, we add it
+    exec_name="$(remove_dot "$exec_name")"      # Remove trailing period; we add it
 
     if [ "${DRY_RUN:-false}" = "true" ]; then
         # Simulate execution during a dry run
-        # Log "Running" message
         printf "%b[-]%b %s: %s. Command: \"%s\".\n" "$BOLD$FGGLD" "$RESET" "$sim_prefix" "$exec_name" "$exec_process"
         sleep 3
         result=0
     else
         # Execute the command and capture the exit status
-        # Log "Running" message
         printf "%b[-]%b %s: %s.\n" "$BOLD$FGGLD" "$RESET" "$start_prefix" "$exec_name"
         eval "$exec_process" > /dev/null 2>&1
         result=$?
@@ -747,43 +742,45 @@ exec_command() {
     # Log success or failure
     if [ "$result" -eq 0 ]; then
         printf "%b[✔]%b %s: %s.\n" "$BOLD$FGGRN" "$RESET" "$success_prefix" "$exec_name"
+        set -e  # Re-enable errexit
         return 0
     else
         printf "%b[✘]%b %s: %s. (Exit Code: %d)\n" "$BOLD$FGRED" "$RESET" "$fail_prefix" "$exec_name" "$result"
+        set -e  # Re-enable errexit
         return 1
     fi
 }
 
-# Execute a command replacing the current shell process.  Current process exits.
+# Execute a command replacing the current shell process. Current process exits.
 exec_new_shell() {
     local exec_name="${1:-Unnamed Operation}"   # Default to "Unnamed Operation" if $1 is unset
     local exec_process="${2:-true}"             # Default to "true" if $2 is unset (a no-op command)
-    local result                                # Store the command's exit status
     local start_prefix="Running"
     local sim_prefix="Simulating"
-    local success_prefix="Finished"
     local script_path="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 
-    exec_process=="$(remove_dot "$exec_process")"   # Remove tailing perion, we add it here
-    exec_name="$(remove_dot "$exec_name")"          # Remove tailing perion, we add it here
+    exec_process="$(remove_dot "$exec_process")"   # Remove trailing period
+    exec_name="$(remove_dot "$exec_name")"         # Remove trailing period
 
     if [ "${DRY_RUN:-false}" = "true" ]; then
         # Simulate execution during a dry run
-        # Log "Running" message
         printf "%b[-]%b %s: %s. Command: \"%s\".\n" "$BOLD$FGGLD" "$RESET" "$sim_prefix" "$exec_name" "$exec_process"
         sleep 3
         # Move the cursor up and clear the line
         printf "%b" "${MOVE_UP}${CLEAR_LINE}"
-        # Log start_prefix
+        # Log the operation as completed
         printf "%b[✔]%b %s: %s.\n" "$BOLD$FGGRN" "$RESET" "$start_prefix" "$exec_name"
         logI "Exiting after simulating re-spawn."
     else
-        # Execute the command and capture the exit status
-        # Log "Running" message
+        # Validate exec_process
+        if [[ -z "$exec_process" || ! -x "$exec_process" ]]; then
+            echo "ERROR: $exec_process is not executable or not found!"
+            exit 1
+        fi
+
+        # Execute the command, replacing the current shell process
         printf "%b[✔]%b %s: %s.\n" "$BOLD$FGGRN" "$RESET" "$start_prefix" "$exec_name"
-        pause
         exec env SOURCE_DIR="$script_path" RE_RUN=true "$exec_process"
-        # exit 0 (this is not needed)
     fi
 }
 
@@ -988,22 +985,31 @@ check_hostapd_status() {
 }
 
 install_controller_script() {
-    # Ensure RE_RUN is not "true" and not running from the installed path
-    if [[ "$RE_RUN" != "true" && ! is_running_from_installed_path ]]; then
-        # Log the installation action
+    # Call is_running_from_installed_path once and store the result
+    local is_installed
+    if is_running_from_installed_path; then
+        is_installed=true
+    else
+        is_installed=false
+    fi
+
+    # Evaluate the conditions
+    condition1=$([[ "${RE_RUN:-false}" != "true" ]] && echo true || echo false)
+    condition2=$([[ "$is_installed" == "false" ]] && echo true || echo false)
+
+    if [[ "$condition1" == "true" && "$condition2" == "true" ]]; then
         logI "Installing this tool as $CONTROLLER_PATH."
 
         # Get the directory of the current script
         local script_path
-        script_path="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+        script_path="$(dirname "$(readlink -f "$0")")"
 
-        # Execute commands to install the controller
         exec_command "Installing controller" "cp -f \"$script_path/$THIS_SCRIPT\" \"$CONTROLLER_PATH\""
         exec_command "Change permissions on controller" "chmod +x \"$CONTROLLER_PATH\""
     fi
 
-    # Replace the current running script in mem installed version
-    exec_new_shell "Re-spawning from $new_script_path" "$new_script_path"
+    # Replace the current running script in memory with the installed version
+    exec_new_shell "Re-spawning (1) from $CONTROLLER_PATH" "$CONTROLLER_PATH"
 }
 
 menu() {
@@ -1277,7 +1283,6 @@ update_wifi_profile() {
 
 # Install the AP Pop-Up script to /usr/bin and start its systemd services.
 install_ap_popup() {
-    echo " DEBUG: $SOURCE_DIR"
     if [ ! -f "$SOURCE_DIR/$SOURCE_SCRIPT_NAME" ]; then
         die 1 "Error: $SOURCE_SCRIPT_NAME not found in $SOURCE_DIR. Cannot continue."
     fi
@@ -1290,18 +1295,21 @@ install_ap_popup() {
     create_systemd_timer    # Install timer if needed
     install_man_pages       # Install man pages
 
-    # Install controller.
+    # Install controller
     install_controller_script   # Install controller and relaunch
 }
 
-# Ensure the main configuration file exists.
 check_config_file() {
-    if [ ! -f "$CONFIG_FILE" && -d $SOURCE_DIR ]; then
+    # Ensure the configuration file exists
+    if [[ ! -f "$CONFIG_FILE" && -d "$SOURCE_DIR" ]]; then
         local conf_path="$SOURCE_DIR/../conf/$SCRIPT_NAME.conf"
-        local expanded_path=$(eval echo "$conf_path")
-        echo "$expanded_path"   # TODO: DEBUG:
-        pause                   # TODO: DEBUG:
-        if [ -f "$expanded_path" ]; then
+        local expanded_path
+        expanded_path=$(eval echo "$conf_path")
+
+        echo "$expanded_path"   # TODO: DEBUG
+        pause                   # TODO: DEBUG
+
+        if [[ -f "$expanded_path" ]]; then
             logI "Creating default configuration file at $CONFIG_FILE."
             exec_command "Installing default configuration" "cp \"$expanded_path\" \"$CONFIG_FILE\""
             chown root:root "$CONFIG_FILE"
@@ -1309,7 +1317,7 @@ check_config_file() {
         else
             die 1 "$SCRIPT_NAME.conf not found. Cannot continue."
         fi
-    elif [-f "$CONFIG_FILE" ]; then
+    elif [[ -f "$CONFIG_FILE" ]]; then
         source "$CONFIG_FILE" || die 1 "$CONFIG_FILE not found."
         logI "Configuration loaded."
     fi
@@ -1321,8 +1329,14 @@ create_systemd_service() {
 
     if ! systemctl -all list-unit-files "$SERVICE_FILE" | grep -q "$SERVICE_FILE"; then
         logI "Creating systemd service: $SCRIPT_NAME."
+    else
+        logI "Updating systemd service: $SCRIPT_NAME."
+        exec_command "Disabling $SERVICE_FILE" "systemctl disable $SERVICE_FILE"
+        exec_command "Stopping $SERVICE_FILE" "systemctl stop $SERVICE_FILE"
+        exec_command "Unmasking $SERVICE_FILE" "systemctl unmask $SERVICE_FILE"
+    fi
 
-        cat > "$service_file_path" <<EOF
+    cat > "$service_file_path" <<EOF
 [Unit]
 Description=Automatically toggles WiFi Access Point based on network availability ($SCRIPT_NAME)
 After=multi-user.target
@@ -1338,16 +1352,12 @@ StandardError=file:$LOG_PATH/error.log
 WantedBy=multi-user.target
 EOF
 # TODO: Make sure we have all entries
-# TODO: For sure need log paths
 
-        exec_command "Creating log target" "mkdir $LOG_PATH"
-        exec_command "Unmasking $SERVICE_FILE" "systemctl unmask $SERVICE_FILE"
-        exec_command "Enabling $SERVICE_FILE" "systemctl enable $SERVICE_FILE"
-        exec_command "Reloading systemd" "systemctl daemon-reload"
-        logI "Systemd service $SERVICE_FILE created."
-    else
-        logD "Systemd service $SERVICE_FILE already exists. Skipping."
-    fi
+    exec_command "Creating log target: $LOG_PATH" "mkdir -p $LOG_PATH"
+    exec_command "Unmasking $SERVICE_FILE" "systemctl unmask $SERVICE_FILE"
+    exec_command "Enabling $SERVICE_FILE" "systemctl enable $SERVICE_FILE"
+    exec_command "Reloading systemd" "systemctl daemon-reload"
+    logI "Systemd service $SERVICE_FILE created."
 }
 
 # Create the systemd timer unit for AP Pop-Up if it doesn't already exist.
@@ -1356,6 +1366,12 @@ create_systemd_timer() {
 
     if ! systemctl -all list-unit-files "$TIMER_FILE" | grep -q "$TIMER_FILE"; then
         logI "Creating systemd timer: $SCRIPT_NAME."
+    else
+        logI "Updating systemd timer: $SCRIPT_NAME."
+        exec_command "Disabling $TIMER_FILE" "systemctl disable $TIMER_FILE"
+        exec_command "Stopping $TIMER_FILE" "systemctl stop $TIMER_FILE"
+        exec_command "Unmasking $TIMER_FILE" "systemctl unmask $TIMER_FILE"
+    fi
 
         cat > "$timer_file_path" <<EOF
 [Unit]
@@ -1369,16 +1385,12 @@ OnCalendar=*:0/2
 WantedBy=timers.target
 EOF
 # TODO: Make sure we have all entries
-# TODO: For sure need log paths
 
-        exec_command "Unmasking $TIMER_FILE" "systemctl unmask $TIMER_FILE"
-        exec_command "Enabling $TIMER_FILE" "systemctl enable $TIMER_FILE"
-        exec_command "Reloading systemd" "systemctl daemon-reload"
-        exec_command "Starting $TIMER_FILE" "systemctl start $TIMER_FILE"
-        logI "Systemd service $TIMER_FILE started."
-    else
-        logD "Systemd timer $TIMER_FILE already exists. Skipping."
-    fi
+    exec_command "Unmasking $TIMER_FILE" "systemctl unmask $TIMER_FILE"
+    exec_command "Enabling $TIMER_FILE" "systemctl enable $TIMER_FILE"
+    exec_command "Reloading systemd" "systemctl daemon-reload"
+    exec_command "Starting $TIMER_FILE" "systemctl start $TIMER_FILE"
+    logI "Systemd service $TIMER_FILE started."
 }
 
 # Update the AP SSID and Password in /etc/appop.conf.
@@ -1531,10 +1543,10 @@ validate_host_number() {
     local max="$2"  # Maximum allowed value
 
     if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 0 ] && [ "$num" -le "$max" ]; then
-        return 0  # Valid
+        echo true
     else
         logW "Invalid input. Must be a number between 0 and $max."
-        return 1  # Invalid
+        echo
     fi
 }
 
@@ -1761,10 +1773,14 @@ switch_between_wifi_and_ap() {
     fi
 }
 
-# Check if the daemon exists in SCRIPT_PATH and set DAEMON_IS_INSTALLED accordingly
 is_running_from_installed_path() {
-    # Check if the script is running from the installed path
-    if [[ $(readlink -f "${BASH_SOURCE[0]}") == "$CONTROLLER_PATH" ]]; then
+    echo "DEBUG: is_running_from_installed_path() called"
+    local script_realpath
+    script_realpath="$(readlink -f "$0")"
+    echo "DEBUG: script_realpath=${script_realpath}"
+    echo "DEBUG: CONTROLLER_PATH=${CONTROLLER_PATH}"
+
+    if [[ "$script_realpath" == "$CONTROLLER_PATH" ]]; then
         return 0
     else
         return 1
@@ -1774,9 +1790,9 @@ is_running_from_installed_path() {
 is_daemon_installed() {
     # Check if the file exists in SCRIPT_PATH
     if [[ -f "$SCRIPT_PATH" ]]; then
-        return 0
+        return 0  # Return success (true)
     else
-        return 1
+        return 1  # Return failure (false)
     fi
 }
 
@@ -1965,11 +1981,12 @@ exit_controller() {
 # DEBUG
 pause() {
     printf "Press any key to continue.\n"
-    read -n 1 -t 5 -sr < /dev/tty || true
+    read -n 1 -sr < /dev/tty || true
 }
 
 # Main function
 main() {
+    echo "DEBUG: Current script realpath: $(readlink -f "$0")"
     # Check Environment Functions
     #
     # Arguments Functions
