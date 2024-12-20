@@ -3,8 +3,6 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # TODO:
-#   - Get rid of echoes
-#   - If piped, curl the remainder of the files
 #   - Examine: declare -ar SYSTEM_READS=()
 #   - Figure out:
 #       - run_ap_popup()
@@ -44,7 +42,7 @@ declare SEM_VER="${SEM_VER:-1.0.0}"
 
 # GithHub curl info
 readonly DIRECTORIES=("man" "src" "conf")  # Replace with your directories
-readonly USER_HOME=$(eval echo "~$(echo $SUDO_USER)")
+readonly USER_HOME=$(eval printf "~%s" "$(printf "%s" "$SUDO_USER")")
 
 # Installer name.
 declare THIS_SCRIPT="${THIS_SCRIPT:-apconfig.sh}" # Use existing value, or default to "apconfig.sh".
@@ -154,7 +152,7 @@ stack_trace() {
     local lineno="${BASH_LINENO[0]}" # Line number where the error occurred
 
     # Check terminal color support
-    tput_colors_available=$(tput colors 2>/dev/null || echo "0")
+    tput_colors_available=$(tput colors 2>/dev/null || printf "0")
 
     # Disable colors if terminal supports less than 8 colors
     if [[ "$tput_colors_available" -lt 8 ]]; then
@@ -310,7 +308,7 @@ add_dot() {
         input=".$input"
     fi
 
-    echo "$input"
+    printf "%s\n" "$input"
 }
 
 # Remove a leading dot from a string if present.
@@ -329,7 +327,7 @@ remove_dot() {
         input="${input#.}"
     fi
 
-    echo "$input"
+    printf "%s\n" "$input"
 }
 
 # Add a trailing slash to a string if it's missing.
@@ -348,7 +346,7 @@ add_slash() {
         input="$input/"
     fi
 
-    echo "$input"
+    printf "%s\n" "$input"
 }
 
 # Remove a trailing slash from a string if present.
@@ -367,7 +365,7 @@ remove_slash() {
         input="${input%/}"
     fi
 
-    echo "$input"
+    printf "%s\n" "$input"
 }
 
 ############
@@ -632,15 +630,15 @@ logC() {
 
 # Retrieve the terminal color code or attribute.
 default_color() {
-    tput "$@" 2>/dev/null || echo ""  # Fallback to an empty string on error
+    tput "$@" 2>/dev/null || printf "\n"  # Fallback to an empty string on error
 }
 
 # Execute and combine complex terminal control sequences.
 generate_terminal_sequence() {
     local result
     # Execute the command and capture its output, suppressing errors.
-    result=$("$@" 2>/dev/null || echo "")
-    echo "$result"
+    result=$("$@" 2>/dev/null || printf "\n")
+    printf "$result"
 }
 
 # Initialize terminal colors and text formatting.
@@ -931,7 +929,7 @@ parse_args() {
                 if [[ -z "${2:-}" || "${2:-}" == -* ]]; then
                     die 1 "Missing argument for $1. Specify a valid path."
                 fi
-                LOG_PATH=$(realpath -m "$2" 2>/dev/null || echo "")
+                LOG_PATH=$(realpath -m "$2" 2>/dev/null || printf "\n")
                 if [[ -z "$LOG_PATH" || ! -d "$LOG_PATH" ]]; then
                     die 1 "Invalid or non-existent directory '$2' for --log-file."
                 fi
@@ -1227,7 +1225,7 @@ setup_wifi_network() {
 
     printf "\nDetected WiFi networks:\n"
     for i in "${!wifi_list[@]}"; do
-        local trimmed_entry=$(echo "${wifi_list[i]}" | xargs)
+        local trimmed_entry=$(printf "%s" "${wifi_list[i]}" | xargs)
         printf "%d)\t%s\n" $((i + 1)) "$trimmed_entry"
     done
     printf "%d)\tCancel\n" "$(( ${#wifi_list[@]} + 1 ))"
@@ -1290,21 +1288,21 @@ update_wifi_profile() {
         fi
     else
         # No existing profile found, create a new one
-        echo "No existing profile found for $ssid."
-        echo -e "${FGYLW}Enter the password for the network (minimum 8 characters):${RESET}"
+        printf "No existing profile found for %s.\n" "$ssid"
+        printf "%sEnter the password for the network (minimum 8 characters):%s\n" "${FGYLW}" "${RESET}"
         read -r password < /dev/tty
 
         if [ -n "$password" ] && [ "${#password}" -ge 8 ]; then
-            echo "Creating a new profile and attempting to connect to $ssid..."
+            printf "Creating a new profile and attempting to connect to %s.\n" "$ssid"
             connection_status=$(nmcli device wifi connect "$ssid" password "$password" 2>&1)
             if [ $? -eq 0 ]; then
-                echo "Successfully connected to $ssid and profile saved."
+                printf "Successfully connected to %s and profile saved.\n" "$ssid"
             else
-                echo "Failed to connect to $ssid. Error: $connection_status"
-                echo "The new profile has not been saved."
+                printf "Failed to connect to %s. Error: %s\n" "$ssid" "$connection_status"
+                printf "The new profile has not been saved.\n"
             fi
         else
-            echo "Password must be at least 8 characters. No profile was created."
+            printf "Password must be at least 8 characters. No profile was created.\n"
         fi
     fi
 }
@@ -1446,7 +1444,7 @@ EOF
     read -r new_ssid < /dev/tty
 
     # Trim leading/trailing spaces and remove any enclosing quotes from new_ssid
-    new_ssid=$(echo "$new_ssid" | xargs | sed -e 's/^"//' -e 's/"$//')
+    new_ssid=$(printf "%s" "$new_ssid" | xargs | sed -e 's/^"//' -e 's/"$//')
 
     # Validate the SSID
     if [[ -n "$new_ssid" ]]; then
@@ -1477,7 +1475,7 @@ EOF
     read -r new_pw < /dev/tty
 
     # Trim leading and trailing spaces (if needed)
-    new_pw=$(echo "$new_pw" | xargs)
+    new_pw=$(printf "%s" "$new_pw" | xargs)
 
     # Validate the password
     if [ -n "$new_pw" ]; then
@@ -1524,7 +1522,7 @@ EOF
 
     # Read user's choice
     read -n 1 -t 5 -sr choice < /dev/tty || true
-    echo
+    printf "\n"
     case "$choice" in
         1) base="192.168." ;;
         2) base="10.0." ;;
@@ -1568,7 +1566,7 @@ EOF
     # Confirm the changes
     printf "Apply these changes? (y/N): "
     read -n 1 -t 5 -sr confirm < /dev/tty || true
-    echo
+    printf "\n"
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
         # Apply the changes to the configuration file
         sed -i "s|^AP_CIDR=.*|AP_CIDR=\"$new_ip\"|" "$CONFIG_FILE"
@@ -1672,7 +1670,7 @@ EOF
             exec_command "Update hostname via nmcli" "nmcli general hostname $new_hostname"
 
             # Update /etc/hostname
-            exec_command "Update /etc/hostname" "echo $new_hostname | tee /etc/hostname"
+            exec_command "Update /etc/hostname" "printf '%s\n' \"$new_hostname\" | tee /etc/hostname"
 
             # Update /etc/hosts
             exec_command "Update /etc/hosts" "sed -i 's/$(hostname)/$new_hostname/g' /etc/hosts"
@@ -1866,7 +1864,7 @@ download_files_from_directories() {
     local tree
     tree=$(fetch_tree)
 
-    if [[ $(echo "$tree" | jq '.tree | length') -eq 0 ]]; then
+    if [[ $(printf "%s" "$tree" | jq '.tree | length') -eq 0 ]]; then
         die 1 "Failed to fetch repository tree." "Check repository details or ensure it is public."
         exit 1
     fi
@@ -1875,7 +1873,7 @@ download_files_from_directories() {
         logI "Processing directory: $dir"
 
         local files
-        files=$(echo "$tree" | jq -r --arg TARGET_DIR "$dir/" '.tree[] | select(.type=="blob" and (.path | startswith($TARGET_DIR))) | .path')
+        files=$(printf "%s" "$tree" | jq -r --arg TARGET_DIR "$dir/" '.tree[] | select(.type=="blob" and (.path | startswith($TARGET_DIR))) | .path')
 
         if [[ -z "$files" ]]; then
             logI "No files found in directory: $dir"
@@ -1885,7 +1883,7 @@ download_files_from_directories() {
         local dest_dir="$dest_root/$dir"
         mkdir -p "$dest_dir"
 
-        echo "$files" | while read -r file; do
+        printf "%s\n" "$files" | while read -r file; do
             logI "Downloading: $file"
             download_file "$file" "$dest_dir"
         done
@@ -2019,7 +2017,7 @@ exit_controller() {
 
 # DEBUG
 pause() {
-    printf "Press any key to continue...\n"
+    printf "Press any key to continue.\n"
     read -n 1 -t 5 -sr < /dev/tty || true
 }
 
@@ -2059,7 +2057,6 @@ main() {
         sleep 2
         
         # Replace the current running script
-        echo "$real_script_path"
         exec_newshell "Re-spawning after curl" "$real_script_path"
     fi
 
