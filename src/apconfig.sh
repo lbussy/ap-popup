@@ -414,8 +414,10 @@ is_this_piped() {
 is_this_curled() {
     # Check if the script is being executed via curl | bash
     if [ -p /dev/stdin ] && ps -o comm= $PPID | grep -q "bash"; then
+        echo "DEBUG: Script is curled."
         return 0
     else
+        echo "DEBUG: Script is not curled."
         return 1
     fi
 }
@@ -2004,7 +2006,7 @@ main() {
         
         # Replace the current running script with downloaded script
         exec_new_shell "Re-spawning from $new_script_path" "$new_script_path"
-    elif [[ "$script_name" == "$THIS_SCRIPT" ]]; then
+    elif is_this_piped; then
         install_ap_popup
     fi
 
