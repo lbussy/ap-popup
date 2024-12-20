@@ -3,6 +3,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # TODO:
+#   - Setup a New WiFi Network or Change Password fails to register choice
 #   - Examine: declare -ar SYSTEM_READS=()
 #   - Figure out:
 #       - run_ap_popup()
@@ -32,7 +33,7 @@ declare DRY_RUN="${DRY_RUN:-false}" # Use existing value, or default to "false".
 
 # Semaphore for a re-run after install.
 declare RE_RUN="${RE_RUN:-false}" # Use existing value, or default to "false".
-declare SOURCE_DIR="${SOURCE_DIR:-}" # Use existing value, or default to "".
+declare SOURCE_DIR="${SOURCE_DIR:-$(pwd)}"
 
 # GitHub metadata constants
 declare REPO_ORG="${REPO_ORG:-lbussy}"
@@ -59,8 +60,8 @@ readonly CONTROLLER_NAME="${THIS_SCRIPT%.*}"
 # The final installed name of the main script (no extension).
 declare LOG_PATH="${LOG_PATH:-/var/log/$SCRIPT_NAME}"
 ##
-# Determines if script is piped through bash (curl) or executed locally
-declare CONTROLLER_IS_INSTALLED="${CONTROLLER_IS_INSTALLED:-false}"
+# Determines if script is executed locally
+declare IS_INSTALLED_CONTROLLER="${IS_INSTALLED_CONTROLLER:-false}"
 #
 # Determines if script is piped through bash (curl) or executed locally
 declare DAEMON_IS_INSTALLED="${DAEMON_IS_INSTALLED:-false}"
@@ -1003,8 +1004,8 @@ install_controller_script() {
         # Check if the current script path is not the same as the controller path
         if [[ "$script_path" != "$(dirname "$CONTROLLER_PATH")" ]]; then
 
-            # Check if CONTROLLER_IS_INSTALLED and DAEMON_IS_INSTALLED are true
-            if $CONTROLLER_IS_INSTALLED && $DAEMON_IS_INSTALLED; then
+            # Check if IS_INSTALLED_CONTROLLER and DAEMON_IS_INSTALLED are true
+            if $IS_INSTALLED_CONTROLLER && $DAEMON_IS_INSTALLED; then
                 # Source the configuration file
                 source "$script_path/$SCRIPT_NAME.conf"
             fi
@@ -1015,11 +1016,9 @@ install_controller_script() {
             # Execute commands to install the controller
             exec_command "Installing controller" "cp -f \"$script_path/$THIS_SCRIPT\" \"$CONTROLLER_PATH\""
             exec_command "Change permissions on controller" "chmod +x \"$CONTROLLER_PATH\""
-
-            # Execute the controller script in the new location
-            exec_newshell "New location: $CONTROLLER_PATH" "$CONTROLLER_PATH"
         fi
     fi
+    exec_newshell "New location: $CONTROLLER_PATH" "$CONTROLLER_PATH"
 }
 
 menu() {
@@ -1039,7 +1038,7 @@ menu() {
 
 # Display the main menu for configuration and maintenance tasks.
 display_main_menu() {
-    clear
+    # clear
 
     local menu_number=1
 
@@ -1052,9 +1051,9 @@ display_main_menu() {
     printf "%s\n" "are in range."
     printf "\n"
 
-    if ! $CONTROLLER_IS_INSTALLED; then
+    if ! $IS_INSTALLED_CONTROLLER; then
         printf " %d = Install AP Pop-Up Script\n" "$menu_number"
-        OPTIONS_MAP[$menu_number]="install_appop_script"
+        OPTIONS_MAP[$menu_number]="install_ap_popup"
         menu_number=$((menu_number + 1))
 
         printf " %d = Setup a New WiFi Network or Change Password\n" "$menu_number"
@@ -1068,9 +1067,9 @@ display_main_menu() {
         printf " %d = Exit\n" "$menu_number"
         OPTIONS_MAP[$menu_number]="exit_controller"
         menu_number=$((menu_number + 1))
-    elif $CONTROLLER_IS_INSTALLED && ! $DAEMON_IS_INSTALLED; then
+    elif $IS_INSTALLED_CONTROLLER && ! $DAEMON_IS_INSTALLED; then
         printf " %d = Install AP Pop-Up Script\n" "$menu_number"
-        OPTIONS_MAP[$menu_number]="install_appop_script"
+        OPTIONS_MAP[$menu_number]="install_ap_popup"
         menu_number=$((menu_number + 1))
 
         printf " %d = Setup a New WiFi Network or Change Password\n" "$menu_number"
@@ -1084,7 +1083,7 @@ display_main_menu() {
         printf " %d = Exit\n" "$menu_number"
         OPTIONS_MAP[$menu_number]="exit_controller"
         menu_number=$((menu_number + 1))
-    elif $CONTROLLER_IS_INSTALLED && $DAEMON_IS_INSTALLED; then
+    elif $IS_INSTALLED_CONTROLLER && $DAEMON_IS_INSTALLED; then
         printf " %d = Change the Access Point SSID or Password\n" "$menu_number"
         OPTIONS_MAP[$menu_number]="update_access_point_ssid"
         menu_number=$((menu_number + 1))
@@ -1155,6 +1154,7 @@ execute_menu_option() {
 
 install_man_pages() {
     # Base directory for man pages
+    return # TODO: DEBUG:
     man_base_dir="/usr/share/man"
 
     # Loop through the man pages
@@ -1188,13 +1188,13 @@ setup_wifi_network() {
     local max_attempts=5
 
     if [ ! -f "$CONFIG_FILE" ]; then
-        clear
+        # clear
         logW "Config file not yet present, install script from menu first."
         return
     else
         check_config_file
     fi
-    clear
+    # clear
 
     printf "${FGYLW}${BOLD}Add or modify a WiFi Network${RESET}\n"
     printf "\nScanning for available WiFi networks.\n"
@@ -1308,44 +1308,37 @@ update_wifi_profile() {
 }
 
 # Install the AP Pop-Up script to /usr/bin and start its systemd services.
-install_appop_script() {
-    if [ ! "$RE_RUN" == "true" ]; then
-        clear
-    fi
-
-    install_controller_script   # Install controller and relaunch
-
+install_ap_popup() {
+    echo " DEBUG: $SOURCE_DIR"
     if [ ! -f "$SOURCE_DIR/$SOURCE_SCRIPT_NAME" ]; then
         die 1 "Error: $SOURCE_SCRIPT_NAME not found in $SOURCE_DIR. Cannot continue."
     fi
 
-    if [ ! -f "$SCRIPT_PATH" ]; then
-        exec_command "Installing $SOURCE_SCRIPT_NAME" "cp '$SOURCE_DIR/$SOURCE_SCRIPT_NAME' '$SCRIPT_PATH'"
-        chmod +x "$SCRIPT_PATH"
+    exec_command "Installing $SOURCE_SCRIPT_NAME" "cp '$SOURCE_DIR/$SOURCE_SCRIPT_NAME' '$SCRIPT_PATH'"
+    chmod +x "$SCRIPT_PATH"
 
-        check_config_file       # Install config file if needed
-        create_systemd_service  # Install service if needed
-        create_systemd_timer    # Install timer if needed
-        install_man_pages       # Install man pages
+    # TODO:  This fails when run locally
+    check_config_file       # Install config file if needed
+    create_systemd_service  # Install service if needed
+    create_systemd_timer    # Install timer if needed
+    install_man_pages       # Install man pages
 
-        # Run appop onece
-        exec_command "Calling $SCRIPT_NAME" "$SCRIPT_PATH"
-
-        if [ "$RE_RUN" == "true" ]; then
-            clear
-            RE_RUN="false"
-        exit_controller "Installation complete. You can run this script again by executing 'sudo apconfig'."
-    fi
-    fi
+    # Install controller.
+    install_controller_script   # Install controller and relaunch
 }
 
 # Ensure the main configuration file exists.
 check_config_file() {
+    local conf_path
 
     if [ ! -f "$CONFIG_FILE" ]; then
-        if [ -f "$SOURCE_DIR/$SCRIPT_NAME.conf" ]; then
+        local conf_path="$SOURCE_DIR/../conf/$SCRIPT_NAME.conf"
+        local expanded_path=$(eval echo "$conf_path")
+        echo "$expanded_path"   # TODO: DEBUG:
+        pause               # TODO: DEBUG:
+        if [ -f "$expanded_path" ]; then
             logI "Creating default configuration file at $CONFIG_FILE."
-            exec_command "Installing default configuration" "cp \"$SCRIPT_NAME.conf\" \"../conf/$CONFIG_FILE\""
+            exec_command "Installing default configuration" "cp \"$expanded_path\" \"$CONFIG_FILE\""
             chown root:root "$CONFIG_FILE"
             chmod 600 "$CONFIG_FILE"
         else
@@ -1427,13 +1420,13 @@ EOF
 update_access_point_ssid() {
 
     if [ ! -f "$CONFIG_FILE" ]; then
-        clear
+        # clear
         logW "Config file not yet present, install script from menu first."
         return
     else
         check_config_file
     fi
-    clear
+    # clear
 
     cat << EOF
 
@@ -1496,13 +1489,13 @@ EOF
 update_access_point_ip() {
 
     if [ ! -f "$CONFIG_FILE" ]; then
-        clear
+        # clear
         logW "Config file not yet present, install script from menu first."
         return
     else
         check_config_file
     fi
-    clear
+    # clear
 
     # Declare all local variables
     local choice third_octet fourth_octet base new_ip new_gateway confirm
@@ -1649,7 +1642,7 @@ validate_network_conflict() {
 
 # Change the system hostname using nmcli.
 update_hostname() {
-    clear
+    # clear
     local current_hostname
     current_hostname=$(nmcli general hostname)
 
@@ -1726,7 +1719,7 @@ validate_hostname() {
 
 # Uninstall the appop script and related services/timers.
 uninstall_ap_popup() {
-    clear
+    # clear
     logI "Uninstalling AP Pop-Up."
 
     if systemctl -all list-unit-files "$SERVICE_FILE" | grep -q "$SERVICE_FILE"; then
@@ -1777,9 +1770,11 @@ uninstall_ap_popup() {
         if [ -f "$target_dir/$man_page" ]; then
             exec_command "Removing man page $man_page." "rm '$target_dir/$man_page'"
         fi
+        pause # DEBUG: TODO: 
     done
 
     # Update the man page database
+    pause # DEBUG: TODO: 
     exec_command "Updating man page database." "mandb"
     logI "Man pages removed successfully."
 
@@ -1788,7 +1783,7 @@ uninstall_ap_popup() {
 
 # Run the appop script.
 run_ap_popup() {
-    clear
+    # clear
 
     logI "Running AP Pop-Up."
     if which "$SCRIPT_NAME" &>/dev/null; then
@@ -1800,7 +1795,7 @@ run_ap_popup() {
 
 # Switch between WiFi and AP by running the appop script directly.
 switch_between_wifi_and_ap() {
-    clear
+    # clear
 
     logI "Running AP Pop-Up."
     if which "$SCRIPT_NAME" &>/dev/null; then
@@ -1810,13 +1805,13 @@ switch_between_wifi_and_ap() {
     fi
 }
 
-# Check if the script is running from CONTROLLER_PATH and set CONTROLLER_IS_INSTALLED accordingly
+# Check if the script is running from CONTROLLER_PATH and set IS_INSTALLED_CONTROLLER accordingly
 # Check if the daemon exists in SCRIPT_PATH and set DAEMON_IS_INSTALLED accordingly
 is_running_from_installed_path() {
     local current_script_path
 
     # Initialize variables
-    CONTROLLER_IS_INSTALLED=false
+    IS_INSTALLED_CONTROLLER=false
     DAEMON_IS_INSTALLED=false
 
     # Get the absolute path of the currently running script
@@ -1824,7 +1819,7 @@ is_running_from_installed_path() {
 
     # Check if the script is running from the installed path
     if [[ "$current_script_path" == "$CONTROLLER_PATH" ]]; then
-        CONTROLLER_IS_INSTALLED=true
+        IS_INSTALLED_CONTROLLER=true
     fi
 
     # Check if the file exists in SCRIPT_PATH
@@ -2010,7 +2005,7 @@ update_directory_and_files() {
 
 exit_controller() {
     local message="${1:-Exiting.}"  # Default message if no argument is provided
-    clear
+    # clear
     printf "%s\n" "$message"  # Log the provided or default message
     exit 0
 }
@@ -2058,28 +2053,39 @@ main() {
         
         # Replace the current running script
         exec_newshell "Re-spawning after curl" "$real_script_path"
+    else
+        if [[ "$(basename "$0")" == *.sh ]]; then
+            # Get the current directory
+            local current_dir=$(pwd)
+
+            # Specify the subdirectory name (adjust if needed)
+            local subdirectory="conf"  # Replace "conf" if needed
+
+            # Construct the conf_path
+            conf_path="${current_dir}/../${subdirectory}"
+
+            # Print the conf_path (optional)
+            echo "DEBUG: Configuration path: $conf_path"
+        else
+            true  # No operation if the condition is not met
+        fi
     fi
 
     # See if we are in the installed path
     is_running_from_installed_path
 
-    # Check if CONTROLLER_IS_INSTALLED and DAEMON_IS_INSTALLED are false
-    if ! $CONTROLLER_IS_INSTALLED && ! $DAEMON_IS_INSTALLED; then
+    # Check if IS_INSTALLED_CONTROLLER and DAEMON_IS_INSTALLED are false
+    if ! $IS_INSTALLED_CONTROLLER && ! $DAEMON_IS_INSTALLED; then
         # Get any apt packages needed
         apt_packages
     fi
 
-    # If we are re-spawning after install, go back to install
-    if [ "$RE_RUN" == "true" ]; then
-        install_appop_script
-    else
-        # Print/Display Environment Functions
-        print_system        # Log system information
-        print_version       # Log the script version
+    # Print/Display Environment Functions
+    print_system        # Log system information
+    print_version       # Log the script version
 
-        # Check nmcli is running
-        check_network_manager
-    fi
+    # Check nmcli is running
+    check_network_manager
 
     # Execute menu
     menu
