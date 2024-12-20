@@ -410,6 +410,16 @@ is_this_piped() {
     fi
 }
 
+# Determine how the script was executed.
+is_this_curled() {
+    # Check if the script is being executed via curl | bash
+    if [ -p /dev/stdin ] && ps -o comm= $PPID | grep -q "bash"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Enforce that the script is run directly with `sudo`.
 enforce_sudo() {
     if [[ "$REQUIRE_SUDO" == true ]]; then
@@ -1983,7 +1993,7 @@ main() {
     check_release       # Check Raspbian OS version compatibility
 
     # If we are piped, make sure we are not re-running the script in a new shell
-    if is_this_piped && [[ ! $(basename "$0") == "$THIS_SCRIPT" ]]; then
+    if is_this_piped && is_this_curled; then
         # Curl installer to local temp_dir
         download_files_from_directories
 
