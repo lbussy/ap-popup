@@ -26,14 +26,13 @@ IFS=$'\n\t'
 #       vs
 #       - switch_between_wifi_and_ap()
 #   - Make installed (called by .sh) idempotent/upgrade
-# Uninstall is SUPER short
 
 # Installer name.
 declare DRY_RUN="${DRY_RUN:-false}" # Use existing value, or default to "false".
 
 # Semaphore for a re-run after install.
 declare RE_RUN="${RE_RUN:-false}" # Use existing value, or default to "false".
-declare SOURCE_DIR="${SOURCE_DIR:-$(pwd)}"
+declare SOURCE_DIR="${SOURCE_DIR:-""}"
 
 # GitHub metadata constants
 declare REPO_ORG="${REPO_ORG:-lbussy}"
@@ -41,8 +40,10 @@ declare REPO_NAME="${REPO_NAME:-ap-popup}"
 declare REPO_BRANCH="${REPO_BRANCH:-main}"
 declare SEM_VER="${SEM_VER:-1.0.0}"
 
-# GithHub curl info
-readonly DIRECTORIES=("man" "src" "conf")  # Replace with your directories
+# Array of repo directories we need from GitHub
+readonly DIRECTORIES=("man" "src" "conf")
+
+# Get hone directory of running user
 readonly USER_HOME=$(eval printf "~%s" "$(printf "%s" "$SUDO_USER")")
 
 # Installer name.
@@ -59,15 +60,9 @@ readonly CONTROLLER_NAME="${THIS_SCRIPT%.*}"
 #
 # The final installed name of the main script (no extension).
 declare LOG_PATH="${LOG_PATH:-/var/log/$SCRIPT_NAME}"
-##
-# Determines if script is executed locally
-declare IS_INSTALLED_CONTROLLER="${IS_INSTALLED_CONTROLLER:-false}"
 #
 # Determines if script is piped through bash (curl) or executed locally
 declare DAEMON_IS_INSTALLED="${DAEMON_IS_INSTALLED:-false}"
-#
-# Determines if script is piped through bash (curl) or executed locally
-declare IS_PIPE="${IS_PIPE:-false}"
 #
 # Path to where the main script (appop) will be installed.
 readonly SCRIPT_PATH="/usr/bin/$SCRIPT_NAME"
@@ -227,7 +222,6 @@ warn() {
     local message="${3:-A warning was raised on this line (${BASH_LINENO[0]})}"  # Default log message
     local details="${4:-}"                                  # Default to no additional details
     local lineno="${BASH_LINENO[1]:-0}"                     # Line number where the function was called
-    local script="${THIS_SCRIPT:-Unknown Script}"           # Script name, with default
 
     # Append error level to the log message
     message="${message}: ($error_level)"
@@ -405,23 +399,15 @@ print_version() {
 }
 
 # Determine how the script was executed.
-check_pipe() {
-    local this_script  # Local variable for script name
-
+is_this_piped() {
     # Check if stdin is a pipe
     if [ -p /dev/stdin ]; then
-        IS_PIPE=true
+        echo "DEBUG: Standard input is a pipe."
+        return 0
     else
-        IS_PIPE=false
+        echo "DEBUG: Standard input is not a pipe."
+        return 1
     fi
-
-    # Check if the script is re-run via $RE_RUN:
-    if [[ "$RE_RUN" == "true" ]]; then
-        IS_PIPE=false
-        THIS_SCRIPT=$CONTROLLER_NAME
-    fi
-
-    export IS_PIPE
 }
 
 # Enforce that the script is run directly with `sudo`.
@@ -687,13 +673,6 @@ init_colors() {
     readonly FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST FGGLD
     readonly BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
     readonly DOT HHR LHR
-
-    # Export variables globally
-    export RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE
-    export BLINK NO_BLINK ITALIC NO_ITALIC MOVE_UP CLEAR_LINE
-    export FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST FGGLD
-    export BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
-    export DOT HHR LHR
 }
 
 # Validate the logging configuration, including LOG_LEVEL.
@@ -764,16 +743,17 @@ exec_command() {
 }
 
 # Execute a command replacing the current shell process.  Current process exits.
-exec_newshell() {
+exec_new_shell() {
     local exec_name="${1:-Unnamed Operation}"   # Default to "Unnamed Operation" if $1 is unset
     local exec_process="${2:-true}"             # Default to "true" if $2 is unset (a no-op command)
     local result                                # Store the command's exit status
     local start_prefix="Running"
     local sim_prefix="Simulating"
     local success_prefix="Finished"
-    local script_path=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
+    local script_path="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 
-    exec_name="$(remove_dot "$exec_name")"      # Remove tailing perion, we add it
+    exec_process=="$(remove_dot "$exec_process")"   # Remove tailing perion, we add it here
+    exec_name="$(remove_dot "$exec_name")"          # Remove tailing perion, we add it here
 
     if [ "${DRY_RUN:-false}" = "true" ]; then
         # Simulate execution during a dry run
@@ -784,13 +764,14 @@ exec_newshell() {
         printf "%b" "${MOVE_UP}${CLEAR_LINE}"
         # Log start_prefix
         printf "%b[✔]%b %s: %s.\n" "$BOLD$FGGRN" "$RESET" "$start_prefix" "$exec_name"
-        exit 0
+        logI "Exiting after simulating re-spawn."
     else
         # Execute the command and capture the exit status
         # Log "Running" message
         printf "%b[✔]%b %s: %s.\n" "$BOLD$FGGRN" "$RESET" "$start_prefix" "$exec_name"
+        pause
         exec env SOURCE_DIR="$script_path" RE_RUN=true "$exec_process"
-        exit 0
+        # exit 0 (this is not needed)
     fi
 }
 
@@ -841,7 +822,8 @@ set_time() {
 }
 
 # Installs or upgrades all packages in the APT_PACKAGES list.
-apt_packages() {
+check_apt_packages() {
+    return # TODO: DEBUG: Commented to speed things up
     # Declare local variables
     local package
 
@@ -994,31 +976,22 @@ check_hostapd_status() {
 }
 
 install_controller_script() {
-    # Declare local variables
-    local script_path
+    # Ensure RE_RUN is not "true" and not running from the installed path
+    if [[ "$RE_RUN" != "true" && ! is_running_from_installed_path ]]; then
+        # Log the installation action
+        logI "Installing this tool as $CONTROLLER_PATH."
 
-    # Check if RE_RUN is not set to "true"
-    if [[ "$RE_RUN" != "true" ]]; then
         # Get the directory of the current script
+        local script_path
         script_path="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
-        # Check if the current script path is not the same as the controller path
-        if [[ "$script_path" != "$(dirname "$CONTROLLER_PATH")" ]]; then
 
-            # Check if IS_INSTALLED_CONTROLLER and DAEMON_IS_INSTALLED are true
-            if $IS_INSTALLED_CONTROLLER && $DAEMON_IS_INSTALLED; then
-                # Source the configuration file
-                source "$script_path/$SCRIPT_NAME.conf"
-            fi
-
-            # Log the installation action
-            logI "Installing this tool as $CONTROLLER_PATH."
-
-            # Execute commands to install the controller
-            exec_command "Installing controller" "cp -f \"$script_path/$THIS_SCRIPT\" \"$CONTROLLER_PATH\""
-            exec_command "Change permissions on controller" "chmod +x \"$CONTROLLER_PATH\""
-        fi
+        # Execute commands to install the controller
+        exec_command "Installing controller" "cp -f \"$script_path/$THIS_SCRIPT\" \"$CONTROLLER_PATH\""
+        exec_command "Change permissions on controller" "chmod +x \"$CONTROLLER_PATH\""
     fi
-    exec_newshell "New location: $CONTROLLER_PATH" "$CONTROLLER_PATH"
+
+    # Replace the current running script in mem installed version
+    exec_new_shell "Re-spawning from $new_script_path" "$new_script_path"
 }
 
 menu() {
@@ -1051,7 +1024,7 @@ display_main_menu() {
     printf "%s\n" "are in range."
     printf "\n"
 
-    if ! $IS_INSTALLED_CONTROLLER; then
+    if ! is_running_from_installed_path; then
         printf " %d = Install AP Pop-Up Script\n" "$menu_number"
         OPTIONS_MAP[$menu_number]="install_ap_popup"
         menu_number=$((menu_number + 1))
@@ -1067,28 +1040,21 @@ display_main_menu() {
         printf " %d = Exit\n" "$menu_number"
         OPTIONS_MAP[$menu_number]="exit_controller"
         menu_number=$((menu_number + 1))
-    elif $IS_INSTALLED_CONTROLLER && ! $DAEMON_IS_INSTALLED; then
-        printf " %d = Install AP Pop-Up Script\n" "$menu_number"
-        OPTIONS_MAP[$menu_number]="install_ap_popup"
-        menu_number=$((menu_number + 1))
 
-        printf " %d = Setup a New WiFi Network or Change Password\n" "$menu_number"
-        OPTIONS_MAP[$menu_number]="setup_wifi_network"
-        menu_number=$((menu_number + 1))
-
-        printf " %d = Change Hostname\n" "$menu_number"
-        OPTIONS_MAP[$menu_number]="update_hostname"
-        menu_number=$((menu_number + 1))
-
-        printf " %d = Exit\n" "$menu_number"
-        OPTIONS_MAP[$menu_number]="exit_controller"
-        menu_number=$((menu_number + 1))
-    elif $IS_INSTALLED_CONTROLLER && $DAEMON_IS_INSTALLED; then
+    elif is_running_from_installed_path; then
         printf " %d = Change the Access Point SSID or Password\n" "$menu_number"
         OPTIONS_MAP[$menu_number]="update_access_point_ssid"
         menu_number=$((menu_number + 1))
 
-        printf " %d = Change the Access Point IP Address\n" "$menu_number"
+        printf " %d = Setup a New WiFi Network or Change Password\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="setup_wifi_network"
+        menu_number=$((menu_number + 1))
+
+        printf " %d = Change Hostname\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="update_hostname"
+        menu_number=$((menu_number + 1))
+
+        printf " %d = Update accepss point IP\n" "$menu_number"
         OPTIONS_MAP[$menu_number]="update_access_point_ip"
         menu_number=$((menu_number + 1))
 
@@ -1096,20 +1062,12 @@ display_main_menu() {
         OPTIONS_MAP[$menu_number]="switch_between_wifi_and_ap"
         menu_number=$((menu_number + 1))
 
-        printf " %d = Setup a New WiFi Network or Change Password\n" "$menu_number"
-        OPTIONS_MAP[$menu_number]="setup_wifi_network"
-        menu_number=$((menu_number + 1))
-
-        printf " %d = Change Hostname\n" "$menu_number"
-        OPTIONS_MAP[$menu_number]="update_hostname"
+        printf " %d = Run appop now\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="run_ap_popup"
         menu_number=$((menu_number + 1))
 
         printf " %d = Uninstall appop\n" "$menu_number"
         OPTIONS_MAP[$menu_number]="uninstall_ap_popup"
-        menu_number=$((menu_number + 1))
-
-        printf " %d = Run appop now\n" "$menu_number"
-        OPTIONS_MAP[$menu_number]="run_ap_popup"
         menu_number=$((menu_number + 1))
 
         printf " %d = Exit\n" "$menu_number"
@@ -1154,7 +1112,7 @@ execute_menu_option() {
 
 install_man_pages() {
     # Base directory for man pages
-    return # TODO: DEBUG:
+    return # TODO: DEBUG: Commented to speed things up
     man_base_dir="/usr/share/man"
 
     # Loop through the man pages
@@ -1191,8 +1149,6 @@ setup_wifi_network() {
         # clear
         logW "Config file not yet present, install script from menu first."
         return
-    else
-        check_config_file
     fi
     # clear
 
@@ -1316,8 +1272,7 @@ install_ap_popup() {
 
     exec_command "Installing $SOURCE_SCRIPT_NAME" "cp '$SOURCE_DIR/$SOURCE_SCRIPT_NAME' '$SCRIPT_PATH'"
     chmod +x "$SCRIPT_PATH"
-
-    # TODO:  This fails when run locally
+    check_apt_packages
     check_config_file       # Install config file if needed
     create_systemd_service  # Install service if needed
     create_systemd_timer    # Install timer if needed
@@ -1329,13 +1284,11 @@ install_ap_popup() {
 
 # Ensure the main configuration file exists.
 check_config_file() {
-    local conf_path
-
-    if [ ! -f "$CONFIG_FILE" ]; then
+    if [ ! -f "$CONFIG_FILE" && -d $SOURCE_DIR ]; then
         local conf_path="$SOURCE_DIR/../conf/$SCRIPT_NAME.conf"
         local expanded_path=$(eval echo "$conf_path")
         echo "$expanded_path"   # TODO: DEBUG:
-        pause               # TODO: DEBUG:
+        pause                   # TODO: DEBUG:
         if [ -f "$expanded_path" ]; then
             logI "Creating default configuration file at $CONFIG_FILE."
             exec_command "Installing default configuration" "cp \"$expanded_path\" \"$CONFIG_FILE\""
@@ -1344,10 +1297,10 @@ check_config_file() {
         else
             die 1 "$SCRIPT_NAME.conf not found. Cannot continue."
         fi
-
+    elif [-f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE" || die 1 "$CONFIG_FILE not found."
+        logI "Configuration loaded."
     fi
-    source "$CONFIG_FILE"
-    logI "Configuration loaded."
 }
 
 # Create the systemd service unit for AP Pop-Up if it doesn't already exist.
@@ -1418,14 +1371,6 @@ EOF
 
 # Update the AP SSID and Password in /etc/appop.conf.
 update_access_point_ssid() {
-
-    if [ ! -f "$CONFIG_FILE" ]; then
-        # clear
-        logW "Config file not yet present, install script from menu first."
-        return
-    else
-        check_config_file
-    fi
     # clear
 
     cat << EOF
@@ -1487,13 +1432,10 @@ EOF
 
 # Update the AP IP and Gateway in /etc/appop.conf.
 update_access_point_ip() {
-
     if [ ! -f "$CONFIG_FILE" ]; then
         # clear
         logW "Config file not yet present, install script from menu first."
         return
-    else
-        check_config_file
     fi
     # clear
 
@@ -1669,7 +1611,7 @@ EOF
             exec_command "Update /etc/hosts" "sed -i 's/$(hostname)/$new_hostname/g' /etc/hosts"
 
             # Change hostname for the current session
-            exec_command "" "hostnamectl set-hostname $new_hostname"
+            exec_command "Set host name with hostnamectl" "hostnamectl set-hostname $new_hostname"
 
             # Update shell session's HOSTNAME variable
             exec_command "Update shell session's HOSTNAME variable" "export HOSTNAME=$new_hostname"
@@ -1755,8 +1697,10 @@ uninstall_ap_popup() {
         rm -f "$CONTROLLER_PATH"
     fi
 
-        # Base directory for man pages
+    # Base directory for man pages
     man_base_dir="/usr/share/man"
+    exit_controller "AP Pop-Up uninstallation complete."
+    return # TODO: DEBUG: Commented to speed things up
 
     # Loop through the man pages
     for man_page in "${MAN_PAGES[@]}"; do
@@ -1805,26 +1749,22 @@ switch_between_wifi_and_ap() {
     fi
 }
 
-# Check if the script is running from CONTROLLER_PATH and set IS_INSTALLED_CONTROLLER accordingly
 # Check if the daemon exists in SCRIPT_PATH and set DAEMON_IS_INSTALLED accordingly
 is_running_from_installed_path() {
-    local current_script_path
-
-    # Initialize variables
-    IS_INSTALLED_CONTROLLER=false
-    DAEMON_IS_INSTALLED=false
-
-    # Get the absolute path of the currently running script
-    current_script_path=$(readlink -f "${BASH_SOURCE[0]}")
-
     # Check if the script is running from the installed path
-    if [[ "$current_script_path" == "$CONTROLLER_PATH" ]]; then
-        IS_INSTALLED_CONTROLLER=true
+    if [[ $(readlink -f "${BASH_SOURCE[0]}") == "$CONTROLLER_PATH" ]]; then
+        return 0
+    else
+        return 1
     fi
+}
 
+is_daemon_installed() {
     # Check if the file exists in SCRIPT_PATH
     if [[ -f "$SCRIPT_PATH" ]]; then
-        DAEMON_IS_INSTALLED=true
+        return 0
+    else
+        return 1
     fi
 }
 
@@ -1852,12 +1792,11 @@ download_file() {
 
 # Main function to list and download files from specified directories
 download_files_from_directories() {
-    # TODO: local dest_root="$USER_HOME/$REPO_NAME"       # Replace with your desired destination root directory
+    # TODO: DEBUG Commented to not overwrite local
+    # local dest_root="$USER_HOME/$REPO_NAME"       # Replace with your desired destination root directory
     local dest_root="$USER_HOME/apppop"       # Replace with your desired destination root directory
     logI "Fetching repository tree."
-
-    local tree
-    tree=$(fetch_tree)
+    local tree=$(fetch_tree)
 
     if [[ $(printf "%s" "$tree" | jq '.tree | length') -eq 0 ]]; then
         die 1 "Failed to fetch repository tree." "Check repository details or ensure it is public."
@@ -1887,6 +1826,7 @@ download_files_from_directories() {
     done
 
     logI "Files saved in: $dest_root"
+    # Update chown chmod directories and files
     update_directory_and_files "$dest_root"
 }
 
@@ -2019,8 +1959,7 @@ pause() {
 # Main function
 main() {
     # Check Environment Functions
-    check_pipe          # Get fallback name if piped through bash
-
+    #
     # Arguments Functions
     parse_args "$@"     # Parse command-line arguments
 
@@ -2030,6 +1969,11 @@ main() {
     validate_sys_accs   # Verify critical system files are accessible
     validate_env_vars   # Check for required environment variables
 
+    # Check if NetworkManager (nmcli) is running and active.
+    check_network_manager
+    # Check hostapd status to ensure it does not conflict with NetworkManager's AP.
+    check_hostapd_status
+
     # Logging Functions
     setup_log           # Setup logging environment
 
@@ -2038,54 +1982,28 @@ main() {
     check_sh_ver        # Verify the current Bash version meets minimum requirements
     check_release       # Check Raspbian OS version compatibility
 
-    if [ "$IS_PIPE" = true ]; then
-        local real_script_path
+    # If we are piped, make sure we are not re-running the script in a new shell
+    if is_this_piped && [[ ! $(basename "$0") == "$THIS_SCRIPT" ]]; then
         # Curl installer to local temp_dir
         download_files_from_directories
 
         # Resolve the real path of the script
         # TODO: local dest_root="$USER_HOME/$REPO_NAME"       # Replace with your desired destination root directory
         local dest_root="$USER_HOME/apppop"       # Replace with your desired destination root directory
-        real_script_path=$(readlink -f "$dest_root/src/$THIS_SCRIPT")
-
-        logI "Re-spawning from $real_script_path."
-        sleep 2
+        local new_script_path=$(readlink -f "$dest_root/src/$THIS_SCRIPT")
         
-        # Replace the current running script
-        exec_newshell "Re-spawning after curl" "$real_script_path"
-    else
-        if [[ "$(basename "$0")" == *.sh ]]; then
-            # Get the current directory
-            local current_dir=$(pwd)
-
-            # Specify the subdirectory name (adjust if needed)
-            local subdirectory="conf"  # Replace "conf" if needed
-
-            # Construct the conf_path
-            conf_path="${current_dir}/../${subdirectory}"
-
-            # Print the conf_path (optional)
-            echo "DEBUG: Configuration path: $conf_path"
-        else
-            true  # No operation if the condition is not met
-        fi
+        # Replace the current running script with downloaded script
+        exec_new_shell "Re-spawning from $new_script_path" "$new_script_path"
+    elif [[ "$script_name" == "$THIS_SCRIPT" ]]; then
+        install_ap_popup
     fi
 
-    # See if we are in the installed path
-    is_running_from_installed_path
-
-    # Check if IS_INSTALLED_CONTROLLER and DAEMON_IS_INSTALLED are false
-    if ! $IS_INSTALLED_CONTROLLER && ! $DAEMON_IS_INSTALLED; then
-        # Get any apt packages needed
-        apt_packages
-    fi
+    # Load config
+    check_config_file
 
     # Print/Display Environment Functions
     print_system        # Log system information
     print_version       # Log the script version
-
-    # Check nmcli is running
-    check_network_manager
 
     # Execute menu
     menu
