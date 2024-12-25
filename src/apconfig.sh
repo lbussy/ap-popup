@@ -4,6 +4,7 @@ IFS=$'\n\t'
 
 #########################################################################
 # TODO:
+#   - Move determine_execution_context() and handle_execution_context() to bash-script (and maybe to Wsorry Pi?)
 #   - Setup a New WiFi Network or Change Password fails to register choice
 #   - Examine: declare -ar SYSTEM_READS=()
 #   - Figure out:
@@ -116,7 +117,7 @@ readonly CONTROLLER_PATH="/usr/local/sbin/$CONTROLLER_NAME" # Full path for the 
 #          here to enable dry-run mode globally or overridden via command-line 
 #          variables. Defaults to `false` if not set.
 #
-# @var IS_PATH
+# @var IS_INSTALLED
 # @brief Indicates whether the script was executed from a `PATH` location.
 # @details Defaults to `false`. Dynamically set to `true` during execution if 
 #          the script is confirmed to have been executed from a directory 
@@ -127,10 +128,22 @@ readonly CONTROLLER_PATH="/usr/local/sbin/$CONTROLLER_NAME" # Full path for the 
 # @details Defaults to `false`. Dynamically set to `true` during execution if 
 #          the script is detected to be within a GitHub repository (i.e., a `.git` 
 #          folder exists in the directory hierarchy).
+#
+# @var IS_PIPED
+# @brief Indicates whether the script was executed through a pipe.
+# @details Defaults to `false`. Dynamically set to `true` if the script's input 
+#          or output is connected via a pipe.
+#
+# @var IS_LOCAL
+# @brief Indicates whether the script is running a local copy.
+# @details Defaults to `false`. Dynamically set to `true` if the script is determined 
+#          to be executed from a local file rather than an installed path.
 # -----------------------------------------------------------------------------
 declare DRY_RUN="${DRY_RUN:-false}"          # Controls global dry-run functionality.
-declare IS_PATH="${IS_PATH:-false}"          # Indicates script execution from a PATH directory.
-declare IS_GITHUB_REPO="${IS_GITHUB_REPO:-false}" # Indicates script resides in a GitHub repository.
+declare IS_INSTALLED="${IS_INSTALLED:-false}"       # Indicates script is running from installed path.
+declare IS_GITHUB_REPO="${IS_GITHUB_REPO:-false}"   # Indicates script resides in a GitHub repository.
+declare IS_PIPED="${IS_PIPED:-false}"        # Indicates script was run through a pipe.
+declare IS_LOCAL="${IS_LOCAL:-false}"        # Indicates script is running a local copy.
 
 # -----------------------------------------------------------------------------
 # @var REPO_ORG
@@ -845,6 +858,9 @@ print_system() {
 #
 # @global THIS_SCRIPT The name of the script.
 # @global SEM_VER The version of the script.
+# @global REPO_NAME The name of the repository.
+#
+# @param $1 [Optional] "debug" to enable additional debug prints.
 #
 # @return None
 #
@@ -854,19 +870,28 @@ print_system() {
 #
 # @example
 # print_version
+# print_version debug
 # Output (example):
 # Running MyRepo's 'my_script.sh', version 1.0.0
 # -----------------------------------------------------------------------------
 print_version() {
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
     local caller  # Holds the name of the calling function
 
     # Check the name of the calling function
     caller="${FUNCNAME[1]}"
 
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: Caller function: '$caller'"
+        echo "DEBUG: THIS_SCRIPT='$THIS_SCRIPT', SEM_VER='$SEM_VER', REPO_NAME='$REPO_NAME'"
+    fi
+
     if [[ "$caller" == "parse_args" ]]; then
         printf "%s: version %s\n" "$THIS_SCRIPT" "$SEM_VER" # Display the script name and version
     else
-        logI "Running $(repo_to_title_case "$REPO_NAME")'s '$THIS_SCRIPT', version $SEM_VER" # Log the script name and version
+        logI "Running $(repo_to_title_case "$REPO_NAME" ${debug_enabled:+"debug"})'s '$THIS_SCRIPT', version $SEM_VER" # Log the script name and version
     fi
 }
 
@@ -875,160 +900,231 @@ print_version() {
 ############
 
 # -----------------------------------------------------------------------------
-# @brief Determines the execution context of the script.
-# @details Identifies how the script was executed and returns a corresponding 
-#          context code based on the following classifications:
-#          - `0`: Script executed via a pipe.
-#          - `1`: Script executed with `bash` in an unusual way.
-#          - `2`: Script executed directly (local or from PATH).
-#          - `3`: Script executed from within a GitHub repository.
-#          - `4`: Script executed from a PATH location.
+# @brief Determine how the script was invoked (piped, local, PATH, etc.).
+# @details Classifies the script's execution context, supporting debug mode for
+#          detailed output. Handles scenarios such as piped execution, direct
+#          execution, execution from a GitHub repository, and PATH-installed execution.
 #
-# @return Integer context code as described above.
+# @param $1 [Optional] "debug" to enable detailed debug output.
+#
+# @global IS_INSTALLED
+# @global IS_PIPED
+# @global IS_LOCAL
+# @global IS_GITHUB_REPO
+#
+# @return Integer Numeric context code:
+#         - 0: Piped input.
+#         - 1: Unusual execution (e.g., process substitution like /dev/fd/).
+#         - 2: Direct local execution.
+#         - 3: Within a GitHub repository (.git detected).
+#         - 4: Execution from a PATH-installed location.
 #
 # @note
-# - Uses `warn()` for warnings and `die()` for critical errors.
-# - Traverses up to 10 directory levels to detect a GitHub repository.
-# - Safeguards against invalid or inaccessible script paths.
+# - The debug mode outputs detailed execution information for troubleshooting.
+# - Detects `.git` folders within up to 10 levels of directory traversal.
+# - Assumes scripts executed from PATH are installed.
 #
 # @example
 # determine_execution_context
-# Context return code: 0 (pipe), 1 (unusual bash), 2 (direct execution), etc.
+# determine_execution_context debug
 # -----------------------------------------------------------------------------
 determine_execution_context() {
-    local script_path   # Full path of the script
-    local current_dir   # Temporary variable to traverse directories
-    local max_depth=10  # Limit for directory traversal depth
-    local depth=0       # Counter for directory traversal
+    local script_path
+    local current_dir
+    local max_depth=10
+    local depth=0
+    local resolved_path
 
-    # Check if the script is executed via pipe
-    if [[ "$0" == "bash" ]]; then
-        if [[ -p /dev/stdin ]]; then
-            return 0  # Execution via pipe
-        else
-            warn "Unusual bash execution detected."
-            return 1  # Unusual bash execution
-        fi
+    # Check for the debug argument
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: \$0 is '$0'"
     fi
 
-    # Get the script path
-    script_path=$(realpath "$0" 2>/dev/null) || script_path=$(pwd)/$(basename "$0")
+    # 1) Unusual bash execution => process substitution
+    if [[ "$0" =~ /dev/fd/ ]] || [[ "$0" =~ /proc/.*/fd/ ]]; then
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: Detected unusual bash execution (process substitution). Setting IS_LOCAL=true"
+        fi
+        IS_LOCAL=true
+        return 1
+    fi
+
+    # 2) Check if script is executed via pipe
+    if [[ -p /dev/stdin ]]; then
+        IS_PIPED=true
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: We have piped input."
+        fi
+
+        # Immediate parent process
+        local parent_cmd
+        parent_cmd="$(ps -p "$PPID" -o cmd= 2>/dev/null || true)"
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: parent_cmd=\"$parent_cmd\""
+        fi
+
+        if [[ "$parent_cmd" =~ cat ]]; then
+            IS_LOCAL=true
+            if [[ -n "$debug_enabled" ]]; then
+                echo "DEBUG: parent is cat => local file"
+            fi
+        else
+            IS_LOCAL=true
+            if [[ -n "$debug_enabled" ]]; then
+                echo "DEBUG: Defaulting to local fallback for piped scenario."
+            fi
+        fi
+
+        # Traverse upward for a GitHub repo
+        current_dir="$(pwd)"
+        while [[ "$current_dir" != "/" && $depth -lt $max_depth ]]; do
+            if [[ -n "$debug_enabled" ]]; then
+                echo "DEBUG: Checking $current_dir for .git"
+            fi
+            if [[ -d "$current_dir/.git" ]]; then
+                IS_GITHUB_REPO=true
+                if [[ -n "$debug_enabled" ]]; then
+                    echo "DEBUG: Found .git in $current_dir"
+                fi
+                break
+            fi
+            current_dir="$(dirname "$current_dir")"
+            ((depth++))
+        done
+
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: Final IS_LOCAL='$IS_LOCAL' before return 0 (piped scenario)"
+        fi
+        return 0
+    fi
+
+    # 3) Direct resolution
+    script_path="$(realpath "$0" 2>/dev/null)" || script_path="$(pwd)/$(basename "$0")"
     if [[ ! -f "$script_path" ]]; then
         die 1 "Unable to resolve script path: $script_path"
     fi
 
-    # Initialize current_dir with the directory part of script_path
     current_dir="${script_path%/*}"
     current_dir="${current_dir:-.}"
 
-    # Safeguard against invalid current_dir during initialization
     if [[ ! -d "$current_dir" ]]; then
         die 1 "Invalid starting directory: $current_dir"
     fi
 
-    # Traverse upwards to detect a GitHub repository
+    # GitHub repo check
     while [[ "$current_dir" != "/" && $depth -lt $max_depth ]]; do
-        if [[ -d "$current_dir/.git" ]]; then
-            return 3  # Execution within a GitHub repository
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: Checking $current_dir for .git"
         fi
-        current_dir=$(dirname "$current_dir") # Move up one directory
+        if [[ -d "$current_dir/.git" ]]; then
+            IS_LOCAL=true
+            IS_GITHUB_REPO=true
+            if [[ -n "$debug_enabled" ]]; then
+                echo "DEBUG: Found .git in $current_dir => return 3"
+            fi
+            return 3
+        fi
+        current_dir="$(dirname "$current_dir")"
         ((depth++))
     done
 
-    # Handle loop termination conditions
-    if [[ $depth -ge $max_depth ]]; then
-        die 1 "Directory traversal exceeded maximum depth ($max_depth)."
-    fi
-
-    # Check if the script is executed from a PATH location
-    local resolved_path
-    resolved_path=$(command -v "$(basename "$0")" 2>/dev/null)
+    # PATH location check
+    resolved_path="$(command -v "$(basename "$0")" 2>/dev/null)"
     if [[ "$resolved_path" == "$script_path" ]]; then
-        return 4  # Execution from a PATH location
+        IS_INSTALLED=true
+        IS_LOCAL=false
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: Script is from PATH => return 4"
+        fi
+        return 4
     fi
 
-    # Default: Direct execution from the local filesystem
+    # Default fallback
+    IS_LOCAL=true
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: default => local => return 2"
+    fi
     return 2
 }
 
 # -----------------------------------------------------------------------------
 # @brief Handles the script execution context and performs relevant actions.
-# @details Determines the execution context by calling `determine_execution_context()`. 
-#          Based on the context, sets and exports global variables, logs messages, 
-#          and optionally outputs debug information about the script's state.
+# @details Uses `determine_execution_context()` to classify how the script was invoked.
+#          Interprets the returned context code to set global state variables,
+#          and optionally outputs debug information.
 #
-# @param $1 [Optional] "debug" argument to enable debug output.
+# @param $1 [Optional] "debug" to enable additional debug prints.
 #
-# @global USE_LOCAL Indicates whether local mode is enabled.
-# @global IS_GITHUB_REPO Indicates whether the script resides in a GitHub repository.
-# @global THIS_SCRIPT The name of the script being executed.
+# @global IS_INSTALLED Indicates if the script was executed from a PATH-installed location.
+# @global IS_PIPED Indicates if the script was executed via a pipe.
+# @global IS_LOCAL Indicates if the script is running as a local copy.
+# @global IS_GITHUB_REPO Indicates if the script resides in a GitHub repository.
 #
 # @return None
 #
 # @note
-# - Validates the execution context and sets appropriate global variables.
-# - Provides debug output if the "debug" argument is passed.
+# - Relies on `determine_execution_context()` for context classification.
+# - Updates relevant global variables based on the determined context.
+# - Debug output is enabled when "debug" is passed as an argument.
 #
 # @example
+# handle_execution_context
 # handle_execution_context debug
-# Outputs execution context details in debug mode.
 # -----------------------------------------------------------------------------
 handle_execution_context() {
-    # TODO: Need to replace is_running_from_installed_path()
-    # TODO: Need to replace is_daemon_installed()
     local debug_enabled="false"
-    [[ "${1:-}" == "debug" ]] && debug_enabled="true"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
 
-    # Call determine_execution_context and capture its output
-    determine_execution_context
-    local context=$?  # Capture the return code to determine context
-
-    # Validate the context
-    if ! [[ "$context" =~ ^[0-4]$ ]]; then
-        die 1 "Invalid context code returned: $context"
+    # Pass "debug" to determine_execution_context if debug is enabled
+    if [[ -n "$debug_enabled" ]]; then
+        determine_execution_context debug
+    else
+        determine_execution_context
     fi
 
-    # Initialize and set global variables based on the context
+    local context=$?  # Capture its return code
+
+    # Interpret context
     case $context in
         0)
-            THIS_SCRIPT="piped_script"
-            USE_LOCAL=false
-            IS_GITHUB_REPO=false
-            IS_PATH=false
-            $debug_enabled && printf "Execution context: Script was piped (e.g., 'curl url | sudo bash').\n"
+            # 0 => Piped execution
+            IS_PIPED=true
             ;;
         1)
-            THIS_SCRIPT="piped_script"
-            USE_LOCAL=false
-            IS_GITHUB_REPO=false
-            IS_PATH=false
-            warn "Execution context: Script run with 'bash' in an unusual way."
+            # 1 => Unusual bash execution (process substitution, etc.)
+            IS_LOCAL=true
             ;;
         2)
-            THIS_SCRIPT=$(basename "$0")
-            USE_LOCAL=true
-            IS_GITHUB_REPO=false
-            IS_PATH=false
-            $debug_enabled && printf "Execution context: Script executed directly from %s.\n" "$THIS_SCRIPT"
+            # 2 => Direct local filesystem
+            IS_LOCAL=true
             ;;
         3)
-            THIS_SCRIPT=$(basename "$0")
-            USE_LOCAL=true
+            # 3 => Within a GitHub repository
+            IS_LOCAL=true
             IS_GITHUB_REPO=true
-            IS_PATH=false
-            $debug_enabled && printf "Execution context: Script is within a GitHub repository.\n"
             ;;
         4)
-            THIS_SCRIPT=$(basename "$0")
-            USE_LOCAL=true
-            IS_GITHUB_REPO=false
-            IS_PATH=true
-            $debug_enabled && printf "Execution context: Script executed from a PATH location (%s).\n" "$(command -v "$THIS_SCRIPT")"
+            # 4 => Executed from a PATH location
+            IS_INSTALLED=true
+            IS_LOCAL=false
             ;;
         *)
-            die 99 "Unknown execution context."
+            die 1 "Unknown context code returned: $context"
             ;;
     esac
+
+    # Print debug info if requested
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: handle_execution_context => final states:"
+        echo "  context=$context"
+        echo "  IS_INSTALLED=$IS_INSTALLED"
+        echo "  IS_PIPED=$IS_PIPED"
+        echo "  IS_LOCAL=$IS_LOCAL"
+        echo "  IS_GITHUB_REPO=$IS_GITHUB_REPO"
+    fi
 }
 
 # -----------------------------------------------------------------------------
@@ -1038,6 +1134,8 @@ handle_execution_context() {
 #          - From a `sudo su` shell.
 #          - As the root user directly without `sudo`.
 #          If the conditions are not met, the script exits with an error message.
+#
+# @param $1 [Optional] "debug" to enable additional debug prints.
 #
 # @global REQUIRE_SUDO Indicates whether `sudo` privileges are required.
 # @global SUDO_USER The username of the user who invoked `sudo`.
@@ -1052,22 +1150,39 @@ handle_execution_context() {
 # - Improper execution contexts (e.g., from a root shell or as the root user) are rejected.
 #
 # @example
-# enforce_sudo
+# enforce_sudo debug
 # -----------------------------------------------------------------------------
 enforce_sudo() {
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
     if [[ "$REQUIRE_SUDO" == true ]]; then
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: REQUIRE_SUDO=$REQUIRE_SUDO"
+            echo "DEBUG: EUID=$EUID"
+            echo "DEBUG: SUDO_USER=${SUDO_USER:-<unset>}"
+            echo "DEBUG: SUDO_COMMAND=${SUDO_COMMAND:-<unset>}"
+            echo "DEBUG: THIS_SCRIPT=$THIS_SCRIPT"
+        fi
+
         if [[ "$EUID" -eq 0 && -n "$SUDO_USER" && "$SUDO_COMMAND" == *"$0"* ]]; then
+            [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Proper execution with 'sudo'."
             return 0  # Script is properly executed with `sudo`
         elif [[ "$EUID" -eq 0 && -n "$SUDO_USER" ]]; then
+            [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Running from a root shell."
             die 1 "This script should not be run from a root shell." \
                   "Run it with 'sudo $THIS_SCRIPT' as a regular user."
         elif [[ "$EUID" -eq 0 ]]; then
+            [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Running as the root user directly."
             die 1 "This script should not be run as the root user." \
                   "Run it with 'sudo $THIS_SCRIPT' as a regular user."
         else
+            [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Script requires 'sudo' privileges."
             die 1 "This script requires 'sudo' privileges." \
                   "Please re-run it using 'sudo $THIS_SCRIPT'."
         fi
+    else
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: REQUIRE_SUDO is not set to true. No enforcement required."
     fi
 }
 
@@ -1076,6 +1191,8 @@ enforce_sudo() {
 # @details Iterates through the global `DEPENDENCIES` array to check if each 
 #          required dependency is installed. Logs an error for any missing 
 #          dependencies and exits the script if one or more are not found.
+#
+# @param $1 [Optional] "debug" to enable debug printing.
 #
 # @global DEPENDENCIES Array of required dependencies.
 #
@@ -1087,21 +1204,35 @@ enforce_sudo() {
 # - The script exits with a non-zero status if any dependencies are missing.
 #
 # @example
-# validate_depends
+# validate_depends debug
 # -----------------------------------------------------------------------------
 validate_depends() {
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
     local missing=0  # Counter for missing dependencies
     local dep        # Iterator for dependencies
+
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: Validating dependencies."
+        echo "DEBUG: DEPENDENCIES=(${DEPENDENCIES[*]})"
+    fi
 
     for dep in "${DEPENDENCIES[@]}"; do
         if ! command -v "$dep" &>/dev/null; then
             logE "Missing dependency: $dep"
             ((missing++))
+            [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Dependency '$dep' is missing."
+        else
+            [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Dependency '$dep' is installed."
         fi
     done
 
     if ((missing > 0)); then
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Total missing dependencies: $missing"
         die 1 "Missing $missing dependencies. Install them and re-run the script."
+    else
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: All dependencies are installed."
     fi
 }
 
@@ -1109,7 +1240,9 @@ validate_depends() {
 # @brief Validate the availability of critical system files.
 # @details Checks that each file in the global `SYSTEM_READS` array exists and is 
 #          readable. Logs an error for any missing or unreadable files and exits 
-#          the script if issues are found.
+#          the script if issues are found. Debug printing is optionally available.
+#
+# @param $1 [Optional] "debug" to enable additional debug prints.
 #
 # @global SYSTEM_READS Array of critical system file paths to check.
 #
@@ -1122,15 +1255,25 @@ validate_depends() {
 #
 # @example
 # validate_sys_accs
+# validate_sys_accs debug
 # -----------------------------------------------------------------------------
 validate_sys_accs() {
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
     local missing=0  # Counter for missing or unreadable files
     local file       # Iterator for files
 
     for file in "${SYSTEM_READS[@]}"; do
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: Checking file: $file"
+        fi
+
         if [[ ! -r "$file" ]]; then
             logE "Missing or unreadable file: $file"
             ((missing++))
+        elif [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: File $file is accessible and readable."
         fi
     done
 
@@ -1143,7 +1286,9 @@ validate_sys_accs() {
 # @brief Validate the existence of required environment variables.
 # @details Checks whether the environment variables listed in the global `ENV_VARS` 
 #          array are set. Logs any missing variables as errors and exits the script 
-#          if one or more variables are missing.
+#          if one or more variables are missing. Debug printing is optionally available.
+#
+# @param $1 [Optional] "debug" to enable additional debug prints.
 #
 # @global ENV_VARS Array of required environment variables.
 #
@@ -1156,15 +1301,25 @@ validate_sys_accs() {
 #
 # @example
 # validate_env_vars
+# validate_env_vars debug
 # -----------------------------------------------------------------------------
 validate_env_vars() {
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
     local missing=0  # Counter for missing environment variables
     local var        # Iterator for environment variables
 
     for var in "${ENV_VARS[@]}"; do
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: Checking environment variable: $var"
+        fi
+
         if [[ -z "${!var:-}" ]]; then
             logE "Missing environment variable: $var"
             ((missing++))
+        elif [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: Environment variable $var is set to '${!var}'"
         fi
     done
 
@@ -1191,7 +1346,7 @@ validate_env_vars() {
 # -----------------------------------------------------------------------------
 check_bash() {
     local debug_enabled="false"
-    [[ "${1:-}" == "debug" ]] && debug_enabled="true"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
 
     $debug_enabled && logD "Starting Bash environment check."
 
@@ -1222,7 +1377,7 @@ check_bash() {
 # -----------------------------------------------------------------------------
 check_sh_ver() {
     local debug_enabled="false"
-    [[ "${1:-}" == "debug" ]] && debug_enabled="true"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
 
     local required_version="${REQUIRE_MIN_BASH_VERSION:-none}"
 
@@ -1265,7 +1420,7 @@ check_sh_ver() {
 # -----------------------------------------------------------------------------
 check_bitness() {
     local debug_enabled="false"
-    [[ "${1:-}" == "debug" ]] && debug_enabled="true"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
 
     local bitness
     bitness=$(getconf LONG_BIT)
@@ -1314,7 +1469,7 @@ check_bitness() {
 # -----------------------------------------------------------------------------
 check_bitness() {
     local debug_enabled="false"
-    [[ "${1:-}" == "debug" ]] && debug_enabled="true"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
 
     local bitness
     bitness=$(getconf LONG_BIT)
@@ -1365,7 +1520,7 @@ check_bitness() {
 check_arch() {
     local detected_model is_supported key full_name model chip
     local debug_enabled="false"
-    [[ "${1:-}" == "debug" ]] && debug_enabled="true"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
 
     # Attempt to read and process the compatible string
     if ! detected_model=$(cat /proc/device-tree/compatible 2>/dev/null | tr '\0' '\n' | grep "raspberrypi" | sed 's/raspberrypi,//'); then
@@ -1395,7 +1550,7 @@ check_arch() {
     done
 
     # Debug output of all models if requested
-    if [[ "$debug_enabled" == "true" ]]; then
+    if [[ -n "$debug_enabled" ]]; then
         for key in "${!SUPPORTED_MODELS[@]}"; do
             IFS='|' read -r full_name model chip <<< "$key"
             if [[ "${SUPPORTED_MODELS[$key]}" == "Supported" ]]; then
@@ -1514,7 +1669,7 @@ check_url() {
 # -----------------------------------------------------------------------------
 check_internet() {
     local debug_enabled="false"
-    [[ "${1:-}" == "debug" ]] && debug_enabled="true"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
 
     local primary_url="http://google.com"
     local secondary_url="http://1.1.1.1"
@@ -1704,6 +1859,8 @@ log_message() {
 #          If the directory is invalid or inaccessible, attempts to create it. If all else fails, 
 #          the log file is redirected to `/tmp`. Logs a warning if the fallback is used.
 #
+# @param $1 [Optional] "debug" to enable debug logging.
+#
 # @global LOG_FILE Path to the log file (modifiable to fallback location).
 # @global THIS_SCRIPT The name of the script (used to derive fallback log file name).
 #
@@ -1711,8 +1868,12 @@ log_message() {
 #
 # @example
 # init_log
+# init_log debug
 # -----------------------------------------------------------------------------
 init_log() {
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
     local scriptname="${THIS_SCRIPT%%.*}"  # Extract script name without extension
     local homepath log_dir fallback_log
 
@@ -1724,20 +1885,27 @@ init_log() {
         }
     )
 
+    [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Home directory determined as: $homepath"
+
     # Determine the log file location
     LOG_FILE="${LOG_FILE:-$homepath/$scriptname.log}"
+
+    [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Initial log file path: $LOG_FILE"
 
     # Extract the log directory from the log file path
     log_dir="${LOG_FILE%/*}"
 
     # Check if the log directory exists and is writable
     if [[ -d "$log_dir" && -w "$log_dir" ]]; then
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Log directory '$log_dir' exists and is writable."
         # Attempt to create the log file
         if ! touch "$LOG_FILE" &>/dev/null; then
+            [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Cannot create log file at: $LOG_FILE"
             logW "Cannot create log file: $LOG_FILE"
             log_dir="/tmp"
         fi
     else
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Log directory '$log_dir' is invalid or not writable."
         log_dir="/tmp"
     fi
 
@@ -1746,12 +1914,16 @@ init_log() {
         fallback_log="/tmp/$scriptname.log"
         LOG_FILE="$fallback_log"
         logW "Falling back to log file in /tmp: $LOG_FILE"
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Fallback log file path: $LOG_FILE"
     fi
 
     # Attempt to create the log file in the fallback location
     if ! touch "$LOG_FILE" &>/dev/null; then
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Unable to create log file in fallback location: $LOG_FILE"
         die 1 "Unable to create log file even in fallback location: $LOG_FILE"
     fi
+
+    [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Log file initialized successfully at: $LOG_FILE"
 
     readonly LOG_FILE
     export LOG_FILE
@@ -1799,6 +1971,8 @@ logC() { log_message "CRITICAL" "${1:-}" "${2:-}"; }
 #          `LOG_PROPERTIES` associative array. If `LOG_LEVEL` is not valid, it 
 #          defaults to "INFO" and logs a warning message.
 #
+# @param $1 [Optional] "debug" to enable debug logging.
+#
 # @global LOG_LEVEL Current logging verbosity level.
 # @global LOG_PROPERTIES Associative array defining log level properties.
 #
@@ -1807,12 +1981,21 @@ logC() { log_message "CRITICAL" "${1:-}" "${2:-}"; }
 # @example
 # LOG_LEVEL="DEBUG"
 # validate_log_level
+# validate_log_level debug
 # -----------------------------------------------------------------------------
 validate_log_level() {
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
+    [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Validating LOG_LEVEL='$LOG_LEVEL'."
+
     # Ensure LOG_LEVEL is a valid key in LOG_PROPERTIES
     if [[ -z "${LOG_PROPERTIES[$LOG_LEVEL]:-}" ]]; then
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: LOG_LEVEL '$LOG_LEVEL' is invalid. Defaulting to 'INFO'."
         logW "Invalid LOG_LEVEL '$LOG_LEVEL'. Defaulting to 'INFO'."
         LOG_LEVEL="INFO"
+    else
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: LOG_LEVEL '$LOG_LEVEL' is valid."
     fi
 }
 
@@ -1821,6 +2004,8 @@ validate_log_level() {
 # @details Initializes terminal colors, configures the logging environment, 
 #          defines log properties, and validates the `LOG_LEVEL`. This function 
 #          must be called before any logging functions are used.
+#
+# @param $1 [Optional] "debug" to enable debug logging.
 #
 # @global LOG_LEVEL Current logging verbosity level.
 # @global LOG_PROPERTIES Associative array defining log level properties.
@@ -1837,16 +2022,25 @@ validate_log_level() {
 #
 # @example
 # setup_log
+# setup_log debug
 # logD "Debugging log setup."
 # -----------------------------------------------------------------------------
 setup_log() {
+    local debug_enabled
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
+    [[ -n "$debug_enabled" ]] && echo "DEBUG: Starting logging setup."
+
     # Initialize terminal colors
-    init_colors
+    [[ -n "$debug_enabled" ]] && echo "DEBUG: Initializing terminal colors."
+    init_colors "$debug_enabled"
 
     # Initialize logging environment
-    init_log
+    [[ -n "$debug_enabled" ]] && echo "DEBUG: Initializing logging environment."
+    init_log "$debug_enabled"
 
     # Define log properties (severity, colors, and labels)
+    [[ -n "$debug_enabled" ]] && echo "DEBUG: Defining log properties."
     declare -gA LOG_PROPERTIES=(
         ["DEBUG"]="DEBUG|${FGCYN}|0"
         ["INFO"]="INFO |${FGGRN}|1"
@@ -1856,17 +2050,22 @@ setup_log() {
         ["EXTENDED"]="EXTD |${FGCYN}|0"
     )
 
+    [[ -n "$debug_enabled" ]] && echo "DEBUG: Log properties defined."
+
     # Validate the log level and log properties
-    validate_log_level
+    [[ -n "$debug_enabled" ]] && echo "DEBUG: Validating log level."
+    validate_log_level "$debug_enabled"
+
+    [[ -n "$debug_enabled" ]] && echo "DEBUG: Logging setup complete."
 }
 
 # -----------------------------------------------------------------------------
 # @brief Retrieve the terminal color code or attribute.
-# @details Uses `tput` to retrieve a terminal color code or attribute (e.g., 
-#          `sgr0` for reset, `bold` for bold text). If the attribute is unsupported 
+# @details Uses tput to retrieve a terminal color code or attribute (e.g., 
+#          sgr0 for reset, bold for bold text). If the attribute is unsupported 
 #          by the terminal, the function returns an empty string.
 #
-# @param $1 The terminal color code or attribute to retrieve (e.g., `bold`, `smso`).
+# @param $1 The terminal color code or attribute to retrieve (e.g., bold, smso).
 #
 # @return The corresponding terminal value or an empty string if unsupported.
 #
@@ -1892,7 +2091,6 @@ default_color() {
 # -----------------------------------------------------------------------------
 generate_terminal_sequence() {
     local result
-    # Execute the command and capture its output, suppressing errors.
     result=$("$@" 2>/dev/null || printf "\n")
     printf "%s" "$result"
 }
@@ -1913,11 +2111,14 @@ generate_terminal_sequence() {
 # @return None
 #
 # @example
-# init_colors
 # printf "%sBold and red text%s\n" "$BOLD$FGRED" "$RESET"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2034
 init_colors() {
+    local debug_enabled
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
+    [[ -n "$debug_enabled" ]] && echo "DEBUG: Starting init colors."
     # General text attributes
     RESET=$(default_color sgr0)
     BOLD=$(default_color bold)
@@ -1960,7 +2161,6 @@ init_colors() {
     readonly BLINK NO_BLINK ITALIC NO_ITALIC MOVE_UP CLEAR_LINE
     readonly FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST FGGLD
     readonly BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
-    readonly DOT HHR LHR
 }
 
 # -----------------------------------------------------------------------------
@@ -2038,24 +2238,41 @@ toggle_console_log() {
 #          Git URLs. If not inside a Git repository or no remote URL is configured, 
 #          the function logs an error and exits with a non-zero status.
 #
+# @param $1 [Optional] "debug" to enable additional debug prints.
+#
 # @return Prints the owner or organization name to standard output if successful.
 # @retval 0 Success: The owner or organization name is printed.
 # @retval 1 Failure: Logs an error message and exits.
 #
 # @example
 # get_repo_org
+# get_repo_org debug
 # Output: "organization-name"
 # -----------------------------------------------------------------------------
 get_repo_org() {
+    local debug_enabled
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
     local url organization
 
     # Retrieve the remote URL from Git configuration.
     url=$(git config --get remote.origin.url)
 
+    if [[ -n "$debug_enabled" ]]; then
+        if [[ -n "$url" ]]; then
+            echo "DEBUG: Retrieved remote URL: '$url'"
+        else
+            echo "DEBUG: No remote URL configured or not inside a Git repository."
+        fi
+    fi
+
     # Check if the URL is non-empty.
     if [[ -n "$url" ]]; then
         # Extract the owner or organization name (supports HTTPS and SSH Git URLs).
         organization=$(printf "%s" "$url" | sed -E 's#(git@|https://)([^:/]+)[:/]([^/]+)/.*#\3#')
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: Extracted organization: '$organization'"
+        fi
         printf "%s\n" "$organization"
     else
         die 1 "Not inside a Git repository or no remote URL configured."
@@ -2069,25 +2286,44 @@ get_repo_org() {
 #          a Git repository or no remote URL is configured, the function logs 
 #          an error and exits with a non-zero status.
 #
+# @param $1 [Optional] "debug" to enable additional debug prints.
+#
 # @return Prints the project name to standard output if successful.
 # @retval 0 Success: The project name is printed.
 # @retval 1 Failure: Logs an error message and exits.
 #
 # @example
 # get_repo_name
+# get_repo_name debug
 # Output: "repository-name"
 # -----------------------------------------------------------------------------
 get_repo_name() {
+    local debug_enabled
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
     local url repo_name
 
     # Retrieve the remote URL from Git configuration.
     url=$(git config --get remote.origin.url)
+
+    if [[ -n "$debug_enabled" ]]; then
+        if [[ -n "$url" ]]; then
+            echo "DEBUG: Retrieved remote URL: '$url'"
+        else
+            echo "DEBUG: No remote URL configured or not inside a Git repository."
+        fi
+    fi
 
     # Check if the URL is non-empty.
     if [[ -n "$url" ]]; then
         # Extract the repository name and remove the `.git` suffix if present.
         repo_name="${url##*/}"       # Remove everything up to the last `/`.
         repo_name="${repo_name%.git}" # Remove the `.git` suffix.
+
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: Extracted repository name: '$repo_name'"
+        fi
+
         printf "%s\n" "$repo_name"
     else
         die 1 "Not inside a Git repository or no remote URL configured."
@@ -2101,6 +2337,7 @@ get_repo_name() {
 #          Ensures the first letter of each word is capitalized.
 #
 # @param $1 The Git repository name (e.g., "my_repo-name").
+# @param $2 [Optional] "debug" to enable additional debug prints.
 #
 # @return Prints the repository name in title case (e.g., "My Repo Name").
 # @retval 0 Success: The title-cased name is printed.
@@ -2108,10 +2345,14 @@ get_repo_name() {
 #
 # @example
 # repo_to_title_case "my_repo-name"
+# repo_to_title_case "my_repo-name" debug
 # Output: "My Repo Name"
 # -----------------------------------------------------------------------------
 repo_to_title_case() {
     local repo_name="$1"  # Input repository name
+    local debug_enabled="false"
+    [[ "${2:-}" == "debug" ]] && debug_enabled="true"
+
     local title_case      # Variable to hold the formatted name
 
     # Validate input
@@ -2119,8 +2360,16 @@ repo_to_title_case() {
         die 1 "Error: Repository name cannot be empty."
     fi
 
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: Input repository name: '$repo_name'"
+    fi
+
     # Replace underscores and hyphens with spaces and convert to title case
     title_case=$(printf "%s" "$repo_name" | tr '_-' ' ' | awk '{for (i=1; i<=NF; i++) $i=toupper(substr($i,1,1)) substr($i,2)}1')
+
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: Converted repository name to title case: '$title_case'"
+    fi
 
     # Output the result
     printf "%s\n" "$title_case"
@@ -2130,64 +2379,71 @@ repo_to_title_case() {
 # @brief Retrieve the current Git branch name or the branch this was detached from.
 # @details Fetches the name of the currently checked-out branch in a Git repository. 
 #          If the repository is in a detached HEAD state, it attempts to determine 
-#          the branch or tag the HEAD was detached from. Logs an error and exits 
-#          if the repository is not inside a Git repository or the source branch 
-#          cannot be determined.
+#          the branch or tag the HEAD was detached from. Defaults to "main" if the 
+#          repository is not inside a Git repository or no branch can be determined.
 #
-# @return Prints the current branch name or the source of the detached HEAD.
-# @retval 0 Success: The branch or detached source name is printed.
-# @retval 1 Failure: Logs an error message and exits.
+# @param $1 [Optional] "debug" to enable additional debug prints.
+#
+# @return Prints the current branch name, the source of the detached HEAD, or "main".
+# @retval 0 Success: The branch or default name is printed.
 #
 # @example
 # get_git_branch
 # Output: "main" or "Detached from branch: develop"
 # -----------------------------------------------------------------------------
 get_git_branch() {
-    local branch detached_from
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
 
-    # Retrieve the current branch name using `git rev-parse`.
+    local branch detached_from
     branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: Retrieved branch name: '$branch'"
+    fi
+
     if [[ -n "$branch" && "$branch" != "HEAD" ]]; then
-        # Print the branch name if available and not in a detached HEAD state.
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Branch state is not detached."
         printf "%s\n" "$branch"
     elif [[ "$branch" == "HEAD" ]]; then
-        # Handle the detached HEAD state: attempt to determine the source.
         detached_from=$(git reflog show --pretty='%gs' | grep -oE 'checkout: moving from [^ ]+' | head -n 1 | awk '{print $NF}')
-        if [[ -n "$detached_from" ]]; then
-            printf "Detached from branch: %s\n" "$detached_from"
-        else
-            die 1 "Detached HEAD state: Cannot determine the source branch."
-        fi
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Detached HEAD state detected. Source: '$detached_from'"
+        printf "%s\n" "${detached_from:-main}"
     else
-        die 1 "Not inside a Git repository."
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Not inside a Git repository. Defaulting to 'main'."
+        printf "main\n"
     fi
 }
 
 # -----------------------------------------------------------------------------
-# @brief Get the most recent Git tag.
-# @details Retrieves the most recent tag in the current Git repository using 
-#          `git describe --tags --abbrev=0`. If no tags are available or the 
-#          command fails, it returns an empty string.
+# @brief Retrieve the most recent Git tag or default to 0.0.1 if unavailable.
+# @details Attempts to retrieve the latest tag in the current Git repository. 
+#          If no tags are found or the Git command fails, defaults to 0.0.1.
 #
-# @return Prints the most recent Git tag, or an empty string if no tags exist.
-# @retval 0 Success: The most recent Git tag is printed.
-# @retval 1 Failure: Logs an error message and exits if not inside a Git repository.
+# @param $1 [Optional] "debug" to enable additional debug prints.
+#
+# @return Outputs the latest Git tag or the default value 0.0.1.
 #
 # @example
 # get_last_tag
-# Output: "v1.2.3" or an empty line if no tags exist.
+# get_last_tag debug
 # -----------------------------------------------------------------------------
 get_last_tag() {
-    local tag
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
 
-    # Retrieve the most recent Git tag
+    local tag
     tag=$(git describe --tags --abbrev=0 2>/dev/null)
 
-    if [[ -z "$tag" ]]; then
-        die 1 "No tags found or not inside a Git repository."
+    if [[ -n "$debug_enabled" ]]; then
+        if [[ -z "$tag" ]]; then
+            echo "DEBUG: No tags found or Git command failed. Defaulting to '0.0.1'."
+        else
+            echo "DEBUG: Retrieved latest Git tag: '$tag'."
+        fi
     fi
 
+    tag="${tag:-0.0.1}"
     printf "%s\n" "$tag"
 }
 
@@ -2197,6 +2453,7 @@ get_last_tag() {
 #          format: `major.minor.patch` (e.g., "1.0.0").
 #
 # @param $1 The Git tag to validate.
+# @param $2 [Optional] "debug" to enable additional debug prints.
 #
 # @return Prints "true" if the tag follows semantic versioning, otherwise "false".
 # @retval 0 Success: Validation result is printed.
@@ -2208,11 +2465,23 @@ get_last_tag() {
 # -----------------------------------------------------------------------------
 is_sem_ver() {
     local tag="$1"
+    local debug_enabled="false"
+    [[ "${2:-}" == "debug" ]] && debug_enabled="true"
+
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: Validating tag: '$tag'"
+    fi
 
     # Validate if the tag follows the semantic versioning format (major.minor.patch)
     if [[ "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: Tag '$tag' matches semantic versioning format."
+        fi
         printf "true\n"
     else
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: Tag '$tag' does not match semantic versioning format."
+        fi
         printf "false\n"
     fi
 }
@@ -2223,6 +2492,7 @@ is_sem_ver() {
 #          the specified tag. If the tag does not exist, the function returns 0.
 #
 # @param $1 The Git tag to count commits from.
+# @param $2 [Optional] "debug" to enable additional debug prints.
 #
 # @return Prints the number of commits since the specified tag, or 0 if the tag 
 #         does not exist or is invalid.
@@ -2231,13 +2501,30 @@ is_sem_ver() {
 #
 # @example
 # get_num_commits "v1.0.0"
+# get_num_commits "v1.0.0" debug
 # Output: "42"
 # -----------------------------------------------------------------------------
 get_num_commits() {
-    local tag="$1" commit_count
+    local tag="${1:-}"
+    local debug_enabled="false"
+    [[ "${2:-}" == "debug" ]] && debug_enabled="true"
+
+    local commit_count
+
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: Counting commits since tag: '$tag'"
+    fi
 
     # Count the number of commits since the given tag
     commit_count=$(git rev-list --count "${tag}..HEAD" 2>/dev/null || printf "0\n")
+
+    if [[ -n "$debug_enabled" ]]; then
+        if [[ "$commit_count" -eq 0 ]]; then
+            echo "DEBUG: No commits found since tag '$tag' or tag is invalid."
+        else
+            echo "DEBUG: Number of commits since tag '$tag': $commit_count"
+        fi
+    fi
 
     printf "%s\n" "$commit_count"
 }
@@ -2246,22 +2533,37 @@ get_num_commits() {
 # @brief Get the short hash of the current Git commit.
 # @details Retrieves the short hash (typically 7 characters) of the current 
 #          commit in the current Git repository. If the repository is invalid 
-#          or inaccessible, the function returns an empty string.
+#          or inaccessible, the function defaults to "0000000".
 #
-# @return Prints the short hash of the current Git commit.
-# @retval 0 Success: The short hash is printed.
-# @retval 1 Failure: If the repository is invalid or inaccessible.
+# @param $1 [Optional] "debug" to enable additional debug prints.
+#
+# @return Prints the short hash of the current Git commit or "0000000" if unavailable.
+# @retval 0 Success: The short hash or default value is printed.
 #
 # @example
 # get_short_hash
-# Output: "abc1234"
+# get_short_hash debug
+# Output: "abc1234" or "0000000"
 # -----------------------------------------------------------------------------
 get_short_hash() {
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
     local short_hash
 
     # Retrieve the short hash of the current Git commit
     short_hash=$(git rev-parse --short HEAD 2>/dev/null)
 
+    if [[ -n "$debug_enabled" ]]; then
+        if [[ -z "$short_hash" ]]; then
+            echo "DEBUG: Git command failed or repository is invalid. Defaulting to '0000000'."
+        else
+            echo "DEBUG: Retrieved short hash: '$short_hash'."
+        fi
+    fi
+
+    # Default to "0000000" if no hash is found
+    short_hash="${short_hash:-0000000}"
     printf "%s\n" "$short_hash"
 }
 
@@ -2271,19 +2573,34 @@ get_short_hash() {
 #          changes, including staged, unstaged, or untracked files. If the 
 #          repository is invalid or inaccessible, it returns "false".
 #
+# @param $1 [Optional] "debug" to enable additional debug prints.
+#
 # @return Prints "true" if there are uncommitted changes, otherwise "false".
 # @retval 0 Success: The status is printed.
 # @retval 1 Failure: If the repository is invalid or inaccessible.
 #
 # @example
 # get_dirty
+# get_dirty debug
 # Output: "true" (if there are uncommitted changes)
 # -----------------------------------------------------------------------------
 get_dirty() {
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
     local changes
 
     # Check for uncommitted changes in the repository
     changes=$(git status --porcelain 2>/dev/null)
+
+    if [[ -n "$debug_enabled" ]]; then
+        if [[ -z "$changes" ]]; then
+            echo "DEBUG: No uncommitted changes detected in the working directory."
+        else
+            echo "DEBUG: Uncommitted changes detected:"
+            echo "$changes"
+        fi
+    fi
 
     if [[ -n "$changes" ]]; then
         printf "true\n"
@@ -2301,45 +2618,79 @@ get_dirty() {
 #          - The short hash of the current commit.
 #          - A "dirty" suffix if there are uncommitted changes in the working directory.
 #
+# @param $1 [Optional] "debug" to enable additional debug prints.
+#
 # @return Prints the generated semantic version string.
 # @retval 0 Success: The semantic version string is printed.
 # @retval 1 Failure: Logs an error and exits if the Git repository is invalid or inaccessible.
 #
 # @example
 # get_sem_ver
+# get_sem_ver debug
 # Output: "1.0.0-main+42.abc1234-dirty"
 # -----------------------------------------------------------------------------
 get_sem_ver() {
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
     local branch_name num_commits short_hash dirty version_string tag
 
     # Determine if the latest tag is a semantic version
-    tag=$(get_last_tag)
+    tag=$(get_last_tag "${debug_enabled}")
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: Retrieved tag: '$tag'"
+    fi
+
     if [[ "$(is_sem_ver "$tag")" == "true" ]]; then
         version_string="$tag"
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: Tag '$tag' is a valid semantic version."
+        fi
     else
-        version_string="1.0.0" # Use default version if no valid tag exists
+        version_string="0.0.1" # Use default version if no valid tag exists
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: Tag '$tag' is not a valid semantic version. Using default '0.0.1'."
+        fi
     fi
 
     # Retrieve the current branch name
-    branch_name=$(get_git_branch)
+    branch_name=$(get_git_branch "${debug_enabled}")
     version_string="$version_string-$branch_name"
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: Current branch: '$branch_name'"
+    fi
 
     # Get the number of commits since the last tag and append it to the tag
     num_commits=$(get_num_commits "$tag")
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: Number of commits since tag '$tag': $num_commits"
+    fi
+
     if [[ "$num_commits" -gt 0 ]]; then
         version_string="$version_string+$num_commits"
     fi
 
     # Get the short hash and append it to the tag
-    short_hash=$(get_short_hash)
+    short_hash=$(get_short_hash "${debug_enabled}")
     if [[ -n "$short_hash" ]]; then
         version_string="$version_string.$short_hash"
+        if [[ -n "$debug_enabled" ]]; then
+            echo "DEBUG: Short hash: '$short_hash'"
+        fi
     fi
 
     # Check for a dirty working directory
-    dirty=$(get_dirty)
+    dirty=$(get_dirty "${debug_enabled}")
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: Working directory dirty state: '$dirty'"
+    fi
+
     if [[ "$dirty" == "true" ]]; then
         version_string="$version_string-dirty"
+    fi
+
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: Generated semantic version: '$version_string'"
     fi
 
     printf "%s\n" "$version_string"
@@ -2348,61 +2699,80 @@ get_sem_ver() {
 # -----------------------------------------------------------------------------
 # @brief Configure local or remote mode based on the Git repository context.
 # @details Determines the script's operating mode (local or remote) based on the 
-#          `USE_LOCAL` and `IS_GITHUB_REPO` variables. In local mode, retrieves 
+#          `IS_LOCAL` and `IS_GITHUB_REPO` variables. In local mode, retrieves 
 #          Git repository parameters such as organization, name, branch, semantic 
 #          version, and relevant paths. In remote mode, sets URLs for accessing 
 #          the repository's raw content and API.
 #
-# @global USE_LOCAL           Indicates whether local mode is enabled.
-# @global IS_GITHUB_REPO      Indicates whether the script resides in a GitHub repository.
-# @global THIS_SCRIPT         Name of the current script.
-# @global REPO_ORG            Git organization or owner name.
-# @global REPO_NAME           Git repository name.
-# @global GIT_BRCH            Current Git branch name.
-# @global SEM_VER             Generated semantic version string.
-# @global LOCAL_SOURCE_DIR    Path to the root of the local repository.
-# @global LOCAL_WWW_DIR       Path to the `data` directory in the repository.
-# @global LOCAL_SCRIPTS_DIR   Path to the `scripts` directory in the repository.
-# @global GIT_RAW             URL for accessing raw files remotely.
-# @global GIT_API             URL for accessing the repository API.
+# @global IS_LOCAL           Indicates whether local mode is enabled.
+# @global IS_GITHUB_REPO     Indicates whether the script resides in a GitHub repository.
+# @global THIS_SCRIPT        Name of the current script.
+# @global REPO_ORG           Git organization or owner name.
+# @global REPO_NAME          Git repository name.
+# @global GIT_BRCH           Current Git branch name.
+# @global SEM_VER            Generated semantic version string.
+# @global LOCAL_SOURCE_DIR   Path to the root of the local repository.
+# @global LOCAL_WWW_DIR      Path to the `data` directory in the repository.
+# @global LOCAL_SCRIPTS_DIR  Path to the `scripts` directory in the repository.
+# @global GIT_RAW            URL for accessing raw files remotely.
+# @global GIT_API            URL for accessing the repository API.
 #
 # @throws Exits with a critical error if:
 #         - Local mode is enabled but the repository context is invalid.
-#         - Remote mode is enabled but `REPO_ORG` or `REPO_NAME` are unset.
 #
 # @return None
 #
 # @example
-# get_proj_params
+# get_proj_params debug
 # echo "Repository: $REPO_ORG/$REPO_NAME"
 # -----------------------------------------------------------------------------
 get_proj_params() {
-    if [[ "$USE_LOCAL" == "true" && "$IS_GITHUB_REPO" == "true" ]]; then
-        THIS_SCRIPT=$(basename "$0")
-        REPO_ORG=$(get_repo_org) || die 1 "Failed to retrieve repository organization."
-        REPO_NAME=$(get_repo_name) || die 1 "Failed to retrieve repository name."
-        GIT_BRCH=$(get_git_branch) || die 1 "Failed to retrieve current branch name."
-        SEM_VER=$(get_sem_ver) || die 1 "Failed to generate semantic version."
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
 
-        # Get the root directory of the repository
+    if [[ "$IS_LOCAL" == "true" && "$IS_GITHUB_REPO" == "true" ]]; then
+        THIS_SCRIPT=$(basename "$0")
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: THIS_SCRIPT=$THIS_SCRIPT"
+
+        REPO_ORG=$(get_repo_org ${debug_enabled:+"debug"}) || die 1 "Failed to retrieve repository organization."
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: REPO_ORG=$REPO_ORG"
+
+        REPO_NAME=$(get_repo_name ${debug_enabled:+"debug"}) || die 1 "Failed to retrieve repository name."
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: REPO_NAME=$REPO_NAME"
+
+        GIT_BRCH=$(get_git_branch ${debug_enabled:+"debug"}) || die 1 "Failed to retrieve current branch name."
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: GIT_BRCH=$GIT_BRCH"
+
+        SEM_VER=$(get_sem_ver ${debug_enabled:+"debug"}) || die 1 "Failed to generate semantic version."
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: SEM_VER=$SEM_VER"
+
         LOCAL_SOURCE_DIR=$(git rev-parse --show-toplevel 2>/dev/null)
         if [[ -z "${LOCAL_SOURCE_DIR:-}" ]]; then
             die 1 "Not inside a valid Git repository. Ensure the repository is properly initialized."
         fi
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: LOCAL_SOURCE_DIR=$LOCAL_SOURCE_DIR"
 
-        # Set local paths based on repository structure
         LOCAL_WWW_DIR="$LOCAL_SOURCE_DIR/data"
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: LOCAL_WWW_DIR=$LOCAL_WWW_DIR"
+
         LOCAL_SCRIPTS_DIR="$LOCAL_SOURCE_DIR/scripts"
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: LOCAL_SCRIPTS_DIR=$LOCAL_SCRIPTS_DIR"
+
     else
-        # Configure remote access URLs
-        if [[ -z "${REPO_ORG:-}" || -z "${REPO_NAME:-}" ]]; then
-            die 1 "Remote mode requires REPO_ORG and REPO_NAME to be set."
-        fi
+        # Use "unknown" if REPO_ORG or REPO_NAME is unset
+        REPO_ORG="${REPO_ORG:-unknown}"
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Defaulted REPO_ORG to 'unknown'"
+
+        REPO_NAME="${REPO_NAME:-unknown}"
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Defaulted REPO_NAME to 'unknown'"
+
         GIT_RAW="https://raw.githubusercontent.com/$REPO_ORG/$REPO_NAME"
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: GIT_RAW=$GIT_RAW"
+
         GIT_API="https://api.github.com/repos/$REPO_ORG/$REPO_NAME"
+        [[ "$debug_enabled" == "true" ]] && echo "DEBUG: GIT_API=$GIT_API"
     fi
 
-    # Export global variables for further use
     export THIS_SCRIPT REPO_ORG REPO_NAME GIT_BRCH SEM_VER LOCAL_SOURCE_DIR
     export LOCAL_WWW_DIR LOCAL_SCRIPTS_DIR GIT_RAW GIT_API
 }
@@ -2527,7 +2897,7 @@ update_file() {
         return 1
     fi
 
-    logI "Changing ownership of '$file' to '$owner'..."
+    logI "Changing ownership of '$file' to '$owner'."
     chown "$owner":"$owner" "$file" || { logE "Failed to change ownership."; return 1; }
 
     if [[ "$file" == *.sh ]]; then
@@ -3004,8 +3374,8 @@ install_man_pages() {
 # @example
 # install_ap_popup
 # Output:
-#   Installing apconfig.sh...
-#   Installing controller...
+#   Installing apconfig.sh.
+#   Installing controller.
 # -----------------------------------------------------------------------------
 install_ap_popup() {
     local source_dir="${source_dir:-"$(pwd)"}"
@@ -3204,6 +3574,8 @@ declare -A OPTIONS=(
 # @details Dynamically generates a usage message based on the `OPTIONS` 
 #          associative array, listing each available option and its description.
 #
+# @param $1 [Optional] "debug" to enable additional debug prints.
+#
 # @global OPTIONS Associative array of script options and their properties.
 # @global THIS_SCRIPT Name of the current script.
 #
@@ -3211,15 +3583,27 @@ declare -A OPTIONS=(
 #
 # @example
 # usage
+# usage debug
 # Output:
 #   Usage: script_name [options]
 #
 #   Options:
 #     --dry-run|-d: Enable dry-run mode (no actions performed).
 #     --version|-v: Display script version and exit.
-#     ...
+#     .
 # -----------------------------------------------------------------------------
 usage() {
+    local debug_enabled="false"
+    [[ "${1:-}" == "debug" ]] && debug_enabled="debug" || debug_enabled=""
+
+    if [[ -n "$debug_enabled" ]]; then
+        echo "DEBUG: Generating usage information for script: '$THIS_SCRIPT'"
+        echo "DEBUG: Options available in the OPTIONS array:"
+        for key in "${!OPTIONS[@]}"; do
+            echo "DEBUG:   $key: ${OPTIONS[$key]}"
+        done
+    fi
+
     printf "Usage: %s [options]\n\n" "$THIS_SCRIPT"
     printf "Options:\n"
     for key in "${!OPTIONS[@]}"; do
@@ -3231,7 +3615,8 @@ usage() {
 # @brief Parse command-line arguments.
 # @details Validates and handles script options using the `OPTIONS` array. Updates 
 #          global variables such as `DRY_RUN`, `LOG_FILE`, `LOG_LEVEL`, `TERSE`, 
-#          and `USE_CONSOLE` based on the input arguments.
+#          and `USE_CONSOLE` based on the input arguments. Handles "debug" as a 
+#          special argument to enable debug mode.
 #
 # @param "$@" The command-line arguments passed to the script.
 #
@@ -3246,23 +3631,26 @@ usage() {
 # @throws Exits with code 1 if an unknown option is encountered.
 #
 # @example
-# parse_args --log-level DEBUG --dry-run
+# parse_args --log-level DEBUG --dry-run debug
 # echo $LOG_LEVEL
 # Output: "DEBUG"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2034
 parse_args() {
+    local debug_enabled="false"
+    [[ "${*}" =~ (^|[[:space:]])debug($|[[:space:]]) ]] && debug_enabled="true"
+
     while [[ "$#" -gt 0 ]]; do
         case "$1" in
             --dry-run|-d)
                 DRY_RUN=true
                 ;;
             --version|-v)
-                print_version
+                print_version ${debug_enabled:+"debug"}
                 exit 0
                 ;;
             --help|-h)
-                usage
+                usage ${debug_enabled:+"debug"}
                 exit 0
                 ;;
             --log-file|-f)
@@ -3279,14 +3667,20 @@ parse_args() {
             --console|-c)
                 USE_CONSOLE="true"
                 ;;
+            debug)
+                # Consume "debug" argument but do nothing here since it's handled globally
+                ;;
             *)
                 printf "Unknown option: %s\n" "$1" >&2
-                usage
+                usage ${debug_enabled:+"debug"}
                 exit 1
                 ;;
         esac
         shift
     done
+
+    # Enable debug logging if "debug" was passed
+    [[ "$debug_enabled" == "true" ]] && echo "DEBUG: Debug mode enabled."
 }
 
 ############
@@ -3456,6 +3850,48 @@ check_hostapd_status() {
 ############
 
 # -----------------------------------------------------------------------------
+# @brief Check if the script is running from the installed path.
+# @details This function compares the real path of the script with the 
+#          expected controller path (CONTROLLER_PATH) to determine if the script
+#          is being executed from the correct location. It uses `readlink` to 
+#          resolve the real path of the script.
+# @return 0 if running from the installed path; 1 otherwise.
+# -----------------------------------------------------------------------------
+is_running_from_installed_path() {
+    echo "DEBUG: is_running_from_installed_path() called"
+
+    # Declare local variables
+    local script_realpath
+
+    # Resolve the real path of the script
+    script_realpath="$(readlink -f "$0")"
+    echo "DEBUG: script_realpath=${script_realpath}"
+    echo "DEBUG: CONTROLLER_PATH=${CONTROLLER_PATH}"
+
+    # Compare the resolved path with the controller path
+    if [[ "$script_realpath" == "$CONTROLLER_PATH" ]]; then
+        return 0  # Running from the installed path
+    else
+        return 1  # Not running from the installed path
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Check if the daemon script is installed.
+# @details Verifies if the daemon script exists at the path specified by
+#          the global variable SCRIPT_PATH.
+# @return 0 if the daemon script is installed; 1 otherwise.
+# -----------------------------------------------------------------------------
+is_daemon_installed() {
+    # Check if the file exists in SCRIPT_PATH
+    if [[ -f "$SCRIPT_PATH" ]]; then
+        return 0  # Daemon script is installed (success)
+    else
+        return 1  # Daemon script is not installed (failure)
+    fi
+}
+
+# -----------------------------------------------------------------------------
 # @brief Configure a new WiFi network or modify an existing one.
 # @details Scans for available WiFi networks, allowing the user to add a new 
 #          network or change the password for an existing one. Handles retries 
@@ -3477,7 +3913,7 @@ check_hostapd_status() {
 #   Detected WiFi networks:
 #   1) Network_A
 #   2) Network_B
-#   ...
+#   .
 #   Enter the number corresponding to the network you wish to configure:
 # -----------------------------------------------------------------------------
 setup_wifi_network() {
@@ -3567,7 +4003,7 @@ setup_wifi_network() {
 #   Configuring WiFi network: MyNetwork
 #   An existing profile for this SSID was found: MyNetwork
 #   Enter the new password for the network (or press Enter to skip updating):
-#   Password updated. Attempting to connect to MyNetwork...
+#   Password updated. Attempting to connect to MyNetwork.
 #   Successfully connected to MyNetwork.
 # -----------------------------------------------------------------------------
 update_wifi_profile() {
@@ -3589,7 +4025,7 @@ update_wifi_profile() {
 
         if [ -n "$password" ] && [ "${#password}" -ge 8 ]; then
             nmcli connection modify "$existing_profile" wifi-sec.psk "$password"
-            printf "Password updated. Attempting to connect to %s...\n" "$existing_profile"
+            printf "Password updated. Attempting to connect to %s.\n" "$existing_profile"
             connection_status=$(nmcli device wifi connect "$existing_profile" 2>&1)
             if [ $? -eq 0 ]; then
                 printf "Successfully connected to %s.\n" "$ssid"
@@ -4184,24 +4620,18 @@ main() {
     ############
     ### Check Environment Functions
     ############
+    get_repo_org "debug"
+    return
 
-    # Get execution context of the script and sets relevant environment variables.
-    handle_execution_context # Pass "debug" to enable debug output
-
-    # Get Project Parameters Functions
-    get_proj_params     # Get project and git parameters
-
-    # Arguments Functions
-    parse_args "$@"     # Parse command-line arguments
-
-    # Check Environment Functions
-    enforce_sudo        # Ensure proper privileges for script execution
-    validate_depends    # Ensure required dependencies are installed
-    validate_sys_accs   # Verify critical system files are accessible
-    validate_env_vars   # Check for required environment variables
-
-    # Logging Functions
-    setup_log           # Setup logging environment
+    handle_execution_context    # Get execution context from env, pass "debug" to enable debug output
+    get_proj_params             # Get project and git parameters, pass "debug" to enable debug output
+    parse_args "$@"             # Parse command-line arguments, pass "debug" to enable debug output
+    enforce_sudo                # Ensure proper privileges for script execution, pass "debug" to enable debug output
+    validate_depends            # Ensure required dependencies are installed, pass "debug" to enable debug output
+    validate_sys_accs           # Verify critical system files are accessible, pass "debug" to enable debug output
+    validate_env_vars           # Check for required environment variables, pass "debug" to enable debug output
+    setup_log                   # Setup logging environment, pass "debug" to enable debug output
+    return
 
     # Check Environment Functions with debug available, pass "debug" to enable debug output.
     check_bash          # Ensure the script is executed in a Bash shell
@@ -4219,16 +4649,16 @@ main() {
     ############
     ### Installer Functions
     ############
-    start_script
-    handle_apt_packages
+    start_script#           # If interactive, give opportunity to stop
+    handle_apt_packages     # Install/update any apt packages
 
-    #########################################################################
-    # Previous Program Flow:
+    
+    check_network_manager   # Check if NetworkManager (nmcli) is running and active.
+    check_hostapd_status    # Check hostapd status to ensure it does not conflict with nmcli
 
-    # Check if NetworkManager (nmcli) is running and active.
-    check_network_manager
-    # Check hostapd status to ensure it does not conflict with NetworkManager's AP.
-    check_hostapd_status
+    # @global IS_LOCAL Indicates whether local mode is enabled.
+    # @global IS_GITHUB_REPO Indicates whether the script resides in a GitHub repository.
+    # @global THIS_SCRIPT The name of the script being executed.
 
     # If we are piped, make sure we are not re-running the script in a new shell
     if is_this_piped && is_this_curled; then
