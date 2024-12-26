@@ -3,49 +3,33 @@ set -uo pipefail # Setting -e is far too much work here
 IFS=$'\n\t'
 set +o noclobber
 
-# -----------------------------------------------------------------------------
-# @file
-# @brief Comprehensive Bash script template with advanced functionality.
+#########################################################################
+# TODO:
+#   - Setup a New WiFi Network or Change Password fails to register choice
+#   - Examine: declare -ar SYSTEM_READS=()
+#   - Figure out:
+#       - run_ap_popup()
+			# echo "Using sudo $sc -a will activate the Access Point regardless of any existing WiFi profile"
+			# echo "and stop the timed checks. Use sudo $sc to return to normal use."
+			# if [ "$active_ap" = "n" ]; then
+			# 	systemctl stop AccessPopup.timer
+			# 	start_ap
+			# 	exit
+			# else
+			# 	echo "Access Point $active is already active"
+			# 	exit
+			# fi
+#       - Then:
+            # # check if timer is active. Will have been disabled if arg -a used.
+            # tup="$(systemctl list-timers AccessPopup.timer | grep 'AccessPopup.timer')"
+            # if [ -z "$tup" ];then
+            #     systemctl start AccessPopup.timer
+            # fi
+#       vs
+#       - switch_between_wifi_and_ap()
+#   - Make installed (called by .sh) idempotent/upgrade
+# - Add update from GitHub in menu
 #
-# @details
-# This script provides a robust framework for managing installation processes
-# with extensive logging, error handling, and system validation. It includes:
-# - Detailed stack traces for debugging.
-# - Dynamic logging configuration with support for various levels (DEBUG, INFO, etc.).
-# - System checks for compatibility with OS versions, architectures, dependencies, and environment variables.
-# - Internet connectivity validation with proxy support.
-# - Git repository context retrieval and semantic versioning utilities.
-#
-# @author Lee Bussy
-# @date December 213, 2024
-# @version 1.0.0
-#
-# @copyright
-# This script is open-source and can be modified or distributed under the terms
-# of the MIT license.
-#
-# @par Usage:
-# ```bash
-# ./template.sh [OPTIONS]
-# ```
-# Run `./template.sh --help` for detailed options.
-#
-# @par Requirements:
-# - Bash version 4.0 or higher.
-# - Dependencies as specified in the `DEPENDENCIES` array.
-#
-# @par Features:
-# - Comprehensive environment validation (Bash, OS, dependencies, etc.).
-# - Automatic Git context resolution for local and remote repositories.
-# - Semantic version generation based on Git tags and commit history.
-# - Flexible logging with customizable verbosity and output locations.
-#
-# @see
-# Refer to the repository README for detailed function-level explanations.
-#
-# @warning
-# Ensure this script is executed with appropriate permissions (e.g., sudo for installation tasks).
-# -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
 # @brief Trap unexpected errors during script execution.
@@ -88,22 +72,19 @@ trap_error() {
 ############
 
 # -----------------------------------------------------------------------------
-# @var DRY_RUN
-# @brief Enables simulated execution of certain commands.
-# @details When set to `true`, commands are not actually executed but are 
-#          simulated to allow testing or validation without side effects. 
-#          If set to `false`, commands execute normally.
-#
-# @example
-# DRY_RUN=true ./script.sh  # Run the script in dry-run mode.
+# @var RE_RUN
+# @brief Optional environment variable to control re-execution behavior.
+# @details Ensures that the `RE_RUN` variable is declared to prevent unbound 
+#          variable errors. Defaults to "false" if not explicitly set.
+# @default false
 # -----------------------------------------------------------------------------
-declare DRY_RUN="${DRY_RUN:-false}"  # Use existing value, or default to "false".
+declare RE_RUN="${RE_RUN:-false}" # Use existing value, or default to "false".
 
 # -----------------------------------------------------------------------------
 # @var THIS_SCRIPT
 # @brief The name of the script being executed.
-# @details This variable is initialized to the name of the script (e.g., 
-#          `install.sh`) if not already set. It dynamically defaults to the 
+# @details This variable is initialized to the name of the script (e.g.,
+#          `install.sh`) if not already set. It dynamically defaults to the
 #          basename of the executing script at runtime.
 #
 # @example
@@ -112,10 +93,80 @@ declare DRY_RUN="${DRY_RUN:-false}"  # Use existing value, or default to "false"
 declare THIS_SCRIPT="${THIS_SCRIPT:-$(basename "$0")}"  # Default to the script's name if not set.
 
 # -----------------------------------------------------------------------------
+# @var MAN_PAGES
+# @brief List of man pages to be installed for the application.
+# @details Specifies the man pages associated with the application. Each entry
+#          corresponds to a specific section of the manual:
+#          - `apconfig.1`: General usage guide for `apconfig`.
+#          - `appop.1`: General usage guide for `appop`.
+#          - `appop.5`: Configuration file reference for `appop`.
+# 
+# @var DIRECTORIES
+# @brief List of directories used during man page installation and configuration.
+# @details These directories are involved in storing and managing files related 
+#          to the application:
+#          - `man`: Contains the man pages for the application.
+#          - `src`: Contains source files for the application.
+#          - `conf`: Contains configuration files for the application.
+# -----------------------------------------------------------------------------
+readonly MAN_PAGES=("apconfig.1" "appop.1" "appop.5") # List of application man pages.
+readonly DIRECTORIES=("man" "scripts" "conf")           # Relevant directories for installation.
+
+# -----------------------------------------------------------------------------
+# @var CONTROLLER_NAME
+# @brief The final installed name of the main controller script (without extension).
+# @details Derived from the current script's name (`THIS_SCRIPT`) by removing 
+#          the file extension. This name will be used for the installed controller.
+#
+# @var CONTROLLER_PATH
+# @brief The path where the controller script will be installed.
+# @details Combines `/usr/local/sbin/` with the `CONTROLLER_NAME` to determine 
+#          the full installation path of the controller script.
+# -----------------------------------------------------------------------------
+readonly CONTROLLER_NAME="${THIS_SCRIPT%.*}"                # Final name of the main controller script.
+readonly CONTROLLER_PATH="/usr/local/sbin/$CONTROLLER_NAME" # Full path for the installed controller script.
+
+# -----------------------------------------------------------------------------
+# @brief        Configuration and installation details for the bash-based daemon.
+# @details      This script sets variables and paths required for installing 
+#               and configuring the `appop` daemon and its supporting files.
+#               
+#               Variables:
+#               - SOURCE_APP_NAME: Name of the source script that will be installed as `appop`.
+#               - DEST_APP_NAME: The final installed name of the main script (no extension).
+#               - APP_PATH: Path to where the main script (appop) will be installed.
+#               - SYSTEMD_PATH: Path to the systemd directory for services/timers.
+#               - SERVICE_FILE: Name of the systemd service file to be created/managed.
+#               - TIMER_FILE: Name of the systemd timer file to be created/managed.
+#               - CONFIG_FILE: Path to the AP Pop-Up configuration file.
+#               - LOG_PATH: Path to the directory where logs for the application will be stored.
+# -----------------------------------------------------------------------------
+readonly SOURCE_APP_NAME="${SOURCE_APP_NAME:-appop.sh}" # Name of the script that will be installed as `appop`.
+readonly DEST_APP_NAME="${SOURCE_APP_NAME%.*}"          # The final installed name of the main script (no extension).
+readonly APP_PATH="/usr/bin/$DEST_APP_NAME"             # Path to where the main script (appop) will be installed.
+readonly SYSTEMD_PATH="/etc/systemd/system/"            # Path to the systemd directory for services/timers.
+readonly SERVICE_FILE="$DEST_APP_NAME.service"          # Name of the systemd service file to be created/managed.
+readonly TIMER_FILE="$DEST_APP_NAME.timer"              # Name of the systemd timer file to be created/managed.
+readonly CONFIG_FILE="/etc/$DEST_APP_NAME.conf"         # Path to the AP Pop-Up configuration file.
+declare LOG_PATH="${LOG_PATH:-/var/log/$DEST_APP_NAME}" # Path to the logs for the application.
+
+# -----------------------------------------------------------------------------
+# @var DRY_RUN
+# @brief Enables simulated execution of certain commands.
+# @details When set to `true`, commands are not actually executed but are
+#          simulated to allow testing or validation without side effects.
+#          If set to `false`, commands execute normally.
+#
+# @example
+# DRY_RUN=true ./apconfig.sh  # Run the script in dry-run mode.
+# -----------------------------------------------------------------------------
+declare DRY_RUN="${DRY_RUN:-false}"  # Use existing value, or default to "false".
+
+# -----------------------------------------------------------------------------
 # @var IS_PATH
 # @brief Indicates whether the script was executed from a `PATH` location.
-# @details This variable is initialized to `false` by default. During execution, 
-#          it is dynamically set to `true` if the script is determined to have 
+# @details This variable is initialized to `false` by default. During execution,
+#          it is dynamically set to `true` if the script is determined to have
 #          been executed from a directory listed in the `PATH` environment variable.
 #
 # @example
@@ -130,9 +181,9 @@ declare IS_PATH="${IS_PATH:-false}"  # Default to "false".
 # -----------------------------------------------------------------------------
 # @var IS_GITHUB_REPO
 # @brief Indicates whether the script resides in a GitHub repository or subdirectory.
-# @details This variable is initialized to `false` by default. During execution, it 
-#          is dynamically set to `true` if the script is detected to be within a 
-#          GitHub repository (i.e., if a `.git` directory exists in the directory 
+# @details This variable is initialized to `false` by default. During execution, it
+#          is dynamically set to `true` if the script is detected to be within a
+#          GitHub repository (i.e., if a `.git` directory exists in the directory
 #          hierarchy of the script's location).
 #
 # @example
@@ -147,19 +198,25 @@ declare IS_GITHUB_REPO="${IS_GITHUB_REPO:-false}"  # Default to "false".
 # -----------------------------------------------------------------------------
 # @brief Project metadata constants used throughout the script.
 # @details These variables provide metadata about the script, including ownership,
-#          versioning, and project details. They are initialized with default
-#          values or dynamically set during execution to reflect the project's
+#          versioning, project details, and GitHub URLs. They are initialized with
+#          default values or dynamically set during execution to reflect the project's
 #          context.
 #
 # @vars
 # - @var REPO_ORG The organization or owner of the repository (default: "lbussy").
-# - @var REPO_NAME The name of the repository (default: "bash-installer").
+# - @var REPO_NAME The name of the repository (default: "bash-template").
 # - @var GIT_BRCH The current Git branch name (default: "main").
 # - @var GIT_TAG The current Git tag (default: "0.0.1").
 # - @var SEM_VER The semantic version of the project (default: "0.0.1").
 # - @var LOCAL_SOURCE_DIR The local source directory path (default: unset).
 # - @var LOCAL_WWW_DIR The local web directory path (default: unset).
 # - @var LOCAL_SCRIPTS_DIR The local scripts directory path (default: unset).
+# - @var GIT_RAW The base URL for accessing raw GitHub content
+#                (default: "https://raw.githubusercontent.com/$REPO_ORG/$REPO_NAME").
+# - @var GIT_API The base URL for the GitHub API for this repository
+#                (default: "https://api.github.com/repos/$REPO_ORG/$REPO_NAME").
+# - @var GIT_CLONE The clone URL for the GitHub repository
+#                (default: "https://api.github.com/repos/$REPO_ORG/$REPO_NAME").
 #
 # @example
 # echo "Repository: $REPO_ORG/$REPO_NAME"
@@ -167,15 +224,20 @@ declare IS_GITHUB_REPO="${IS_GITHUB_REPO:-false}"  # Default to "false".
 # echo "Source Directory: ${LOCAL_SOURCE_DIR:-Not Set}"
 # echo "WWW Directory: ${LOCAL_WWW_DIR:-Not Set}"
 # echo "Scripts Directory: ${LOCAL_SCRIPTS_DIR:-Not Set}"
+# echo "Raw URL: $GIT_RAW"
+# echo "API URL: $GIT_API"
 # -----------------------------------------------------------------------------
 declare REPO_ORG="${REPO_ORG:-lbussy}"
-declare REPO_NAME="${REPO_NAME:-bash-installer}"
+declare REPO_NAME="${REPO_NAME:-ap-popup}"
 declare GIT_BRCH="${GIT_BRCH:-main}"
 declare GIT_TAG="${GIT_TAG:-0.0.1}"
 declare SEM_VER="${GIT_TAG:-0.0.1}"
 declare LOCAL_SOURCE_DIR="${LOCAL_SOURCE_DIR:-}"
 declare LOCAL_WWW_DIR="${LOCAL_WWW_DIR:-}"
 declare LOCAL_SCRIPTS_DIR="${LOCAL_SCRIPTS_DIR:-}"
+declare GIT_RAW="${GIT_RAW:-"https://raw.githubusercontent.com/$REPO_ORG/$REPO_NAME"}"
+declare GIT_API="${GIT_API:-"https://api.github.com/repos/$REPO_ORG/$REPO_NAME"}"
+declare GIT_CLONE="${GIT_CLONE:-"https://github.com/$REPO_ORG/$REPO_NAME.git"}"
 
 # -----------------------------------------------------------------------------
 # @var USE_CONSOLE
@@ -207,16 +269,16 @@ declare CONSOLE_STATE="${CONSOLE_STATE:-$USE_CONSOLE}"
 # @var TERSE
 # @brief Enables or disables terse logging mode.
 # @details When `TERSE` is set to `true`, log messages are minimal and optimized
-#          for automated environments where concise output is preferred. When 
-#          set to `false`, log messages are verbose, providing detailed 
+#          for automated environments where concise output is preferred. When
+#          set to `false`, log messages are verbose, providing detailed
 #          information suitable for debugging or manual intervention.
 #
 # @example
 # TERSE=true  # Enables terse logging mode.
-# ./script.sh
+# ./apconfig.sh
 #
 # TERSE=false # Enables verbose logging mode.
-# ./script.sh
+# ./apconfig.sh
 # -----------------------------------------------------------------------------
 declare TERSE="${TERSE:-false}"  # Default to "false" (verbose logging).
 
@@ -225,13 +287,13 @@ declare TERSE="${TERSE:-false}"  # Default to "false" (verbose logging).
 # @brief Indicates whether root privileges are required to run the script.
 # @details This variable determines if the script requires execution with root
 #          privileges. It defaults to `true`, meaning the script will enforce
-#          that it is run with `sudo` or as a root user. This behavior can be 
+#          that it is run with `sudo` or as a root user. This behavior can be
 #          overridden by setting the `REQUIRE_SUDO` environment variable to `false`.
 #
 # @default true
 #
 # @example
-# REQUIRE_SUDO=false ./script.sh  # Run the script without enforcing root privileges.
+# REQUIRE_SUDO=false ./apconfig.sh  # Run the script without enforcing root privileges.
 # -----------------------------------------------------------------------------
 readonly REQUIRE_SUDO="${REQUIRE_SUDO:-true}"  # Default to "true" if not specified.
 
@@ -239,8 +301,8 @@ readonly REQUIRE_SUDO="${REQUIRE_SUDO:-true}"  # Default to "true" if not specif
 # @var REQUIRE_INTERNET
 # @type string
 # @brief Flag indicating if internet connectivity is required.
-# @details Controls whether the script should verify internet connectivity 
-#          during initialization. This variable can be overridden by setting 
+# @details Controls whether the script should verify internet connectivity
+#          during initialization. This variable can be overridden by setting
 #          the `REQUIRE_INTERNET` environment variable before running the script.
 #
 # @values
@@ -250,31 +312,31 @@ readonly REQUIRE_SUDO="${REQUIRE_SUDO:-true}"  # Default to "true" if not specif
 # @default "true"
 #
 # @example
-# REQUIRE_INTERNET=false ./script.sh  # Run the script without verifying internet connectivity.
+# REQUIRE_INTERNET=false ./apconfig.sh  # Run the script without verifying internet connectivity.
 # -----------------------------------------------------------------------------
-readonly REQUIRE_INTERNET="${REQUIRE_INTERNET:-true}"  # Default to "true" if not set.
+readonly REQUIRE_INTERNET="${REQUIRE_INTERNET:-true}"   # Default to "true" if not set.
 
 # -----------------------------------------------------------------------------
 # @var MIN_BASH_VERSION
 # @brief Specifies the minimum supported Bash version.
-# @details Defines the minimum Bash version required to execute the script. By 
-#          default, it is set to `4.0`. This value can be overridden by setting 
+# @details Defines the minimum Bash version required to execute the script. By
+#          default, it is set to `4.0`. This value can be overridden by setting
 #          the `MIN_BASH_VERSION` environment variable before running the script.
 #          To disable version checks entirely, set this variable to `"none"`.
 #
 # @default "4.0"
 #
 # @example
-# MIN_BASH_VERSION="none" ./script.sh  # Disable Bash version checks.
-# MIN_BASH_VERSION="5.0" ./script.sh   # Require at least Bash 5.0.
+# MIN_BASH_VERSION="none" ./apconfig.sh  # Disable Bash version checks.
+# MIN_BASH_VERSION="5.0" ./apconfig.sh   # Require at least Bash 5.0.
 # -----------------------------------------------------------------------------
 readonly MIN_BASH_VERSION="${MIN_BASH_VERSION:-4.0}"  # Default to "4.0" if not specified.
 
 # -----------------------------------------------------------------------------
 # @var MIN_OS
 # @brief Specifies the minimum supported OS version.
-# @details Defines the lowest OS version that the script supports. This value 
-#          should be updated as compatibility requirements evolve. It is used 
+# @details Defines the lowest OS version that the script supports. This value
+#          should be updated as compatibility requirements evolve. It is used
 #          to ensure the script is executed only on compatible systems.
 #
 # @default 11
@@ -291,7 +353,7 @@ readonly MIN_OS=11  # Minimum supported OS version.
 # @var MAX_OS
 # @brief Specifies the maximum supported OS version.
 # @details Defines the highest OS version that the script supports. If the script
-#          is executed on a system with an OS version higher than this value, 
+#          is executed on a system with an OS version higher than this value,
 #          it may not function as intended. Set this to `-1` to indicate no upper
 #          limit on supported OS versions.
 #
@@ -308,12 +370,12 @@ readonly MAX_OS=15  # Maximum supported OS version (use -1 for no upper limit).
 # -----------------------------------------------------------------------------
 # @var SUPPORTED_BITNESS
 # @brief Specifies the supported system bitness.
-# @details Defines the system architectures that the script supports. Acceptable 
+# @details Defines the system architectures that the script supports. Acceptable
 #          values are:
 #          - `"32"`: Only supports 32-bit systems.
 #          - `"64"`: Only supports 64-bit systems.
 #          - `"both"`: Supports both 32-bit and 64-bit systems.
-#          This variable ensures compatibility with the intended system architecture. 
+#          This variable ensures compatibility with the intended system architecture.
 #          It defaults to `"32"` if not explicitly set.
 #
 # @default "32"
@@ -324,13 +386,13 @@ readonly MAX_OS=15  # Maximum supported OS version (use -1 for no upper limit).
 #     exit 1
 # fi
 # -----------------------------------------------------------------------------
-readonly SUPPORTED_BITNESS="32"  # Supported bitness ("32", "64", or "both").
+readonly SUPPORTED_BITNESS="both"  # Supported bitness ("32", "64", or "both").
 
 # -----------------------------------------------------------------------------
 # @var SUPPORTED_MODELS
 # @brief Associative array of Raspberry Pi models and their support statuses.
-# @details This associative array maps Raspberry Pi model identifiers to their 
-#          corresponding support statuses. Each key is a pipe-delimited string 
+# @details This associative array maps Raspberry Pi model identifiers to their
+#          corresponding support statuses. Each key is a pipe-delimited string
 #          containing:
 #          - The model name (e.g., "Raspberry Pi 4 Model B").
 #          - A simplified identifier (e.g., "4-model-b").
@@ -350,71 +412,71 @@ readonly SUPPORTED_BITNESS="32"  # Supported bitness ("32", "64", or "both").
 # -----------------------------------------------------------------------------
 declare -A SUPPORTED_MODELS=(
     # Unsupported Models
-    ["Raspberry Pi 5|5-model-b|bcm2712"]="Not Supported"              # Raspberry Pi 5 Model B
-    ["Raspberry Pi 400|400|bcm2711"]="Not Supported"                  # Raspberry Pi 400
-    ["Raspberry Pi Compute Module 4|4-compute-module|bcm2711"]="Not Supported" # Compute Module 4
-    ["Raspberry Pi Compute Module 3|3-compute-module|bcm2837"]="Not Supported" # Compute Module 3
-    ["Raspberry Pi Compute Module|compute-module|bcm2835"]="Not Supported"     # Original Compute Module
+    ["Raspberry Pi 400|400|bcm2711"]="Not Supported"                            # Raspberry Pi 400
+    ["Raspberry Pi Compute Module 4|4-compute-module|bcm2711"]="Not Supported"  # Compute Module 4
+    ["Raspberry Pi Compute Module 3|3-compute-module|bcm2837"]="Not Supported"  # Compute Module 3
+    ["Raspberry Pi Compute Module|compute-module|bcm2835"]="Not Supported"      # Original Compute Module
 
     # Supported Models
-    ["Raspberry Pi 4 Model B|4-model-b|bcm2711"]="Supported"          # Raspberry Pi 4 Model B
-    ["Raspberry Pi 3 Model A+|3-model-a-plus|bcm2837"]="Supported"    # Raspberry Pi 3 Model A+
-    ["Raspberry Pi 3 Model B+|3-model-b-plus|bcm2837"]="Supported"    # Raspberry Pi 3 Model B+
-    ["Raspberry Pi 3 Model B|3-model-b|bcm2837"]="Supported"          # Raspberry Pi 3 Model B
-    ["Raspberry Pi 2 Model B|2-model-b|bcm2836"]="Supported"          # Raspberry Pi 2 Model B
-    ["Raspberry Pi Model A+|model-a-plus|bcm2835"]="Supported"        # Raspberry Pi Model A+
-    ["Raspberry Pi Model B+|model-b-plus|bcm2835"]="Supported"        # Raspberry Pi Model B+
-    ["Raspberry Pi Model B Rev 2|model-b-rev2|bcm2835"]="Supported"   # Raspberry Pi Model B Rev 2
-    ["Raspberry Pi Model A|model-a|bcm2835"]="Supported"              # Raspberry Pi Model A
-    ["Raspberry Pi Model B|model-b|bcm2835"]="Supported"              # Raspberry Pi Model B
-    ["Raspberry Pi Zero 2 W|model-zero-2-w|bcm2837"]="Supported"      # Raspberry Pi Zero 2 W
-    ["Raspberry Pi Zero|model-zero|bcm2835"]="Supported"              # Raspberry Pi Zero
-    ["Raspberry Pi Zero W|model-zero-w|bcm2835"]="Supported"          # Raspberry Pi Zero W
+    ["Raspberry Pi 5|5-model-b|bcm2712"]="Supported"                # Raspberry Pi 5 Model B
+    ["Raspberry Pi 4 Model B|4-model-b|bcm2711"]="Supported"        # Raspberry Pi 4 Model B
+    ["Raspberry Pi 3 Model A+|3-model-a-plus|bcm2837"]="Supported"  # Raspberry Pi 3 Model A+
+    ["Raspberry Pi 3 Model B+|3-model-b-plus|bcm2837"]="Supported"  # Raspberry Pi 3 Model B+
+    ["Raspberry Pi 3 Model B|3-model-b|bcm2837"]="Supported"        # Raspberry Pi 3 Model B
+    ["Raspberry Pi 2 Model B|2-model-b|bcm2836"]="Supported"        # Raspberry Pi 2 Model B
+    ["Raspberry Pi Model A+|model-a-plus|bcm2835"]="Supported"      # Raspberry Pi Model A+
+    ["Raspberry Pi Model B+|model-b-plus|bcm2835"]="Supported"      # Raspberry Pi Model B+
+    ["Raspberry Pi Model B Rev 2|model-b-rev2|bcm2835"]="Supported" # Raspberry Pi Model B Rev 2
+    ["Raspberry Pi Model A|model-a|bcm2835"]="Supported"            # Raspberry Pi Model A
+    ["Raspberry Pi Model B|model-b|bcm2835"]="Supported"            # Raspberry Pi Model B
+    ["Raspberry Pi Zero 2 W|model-zero-2-w|bcm2837"]="Supported"    # Raspberry Pi Zero 2 W
+    ["Raspberry Pi Zero|model-zero|bcm2835"]="Supported"            # Raspberry Pi Zero
+    ["Raspberry Pi Zero W|model-zero-w|bcm2835"]="Supported"        # Raspberry Pi Zero W
 )
 readonly SUPPORTED_MODELS
 
 # -----------------------------------------------------------------------------
 # @var LOG_OUTPUT
 # @brief Controls where log messages are directed.
-# @details Specifies the logging destination(s) for the script's output. This 
+# @details Specifies the logging destination(s) for the script's output. This
 #          variable can be set to one of the following values:
 #          - `"file"`: Log messages are written only to a file.
 #          - `"console"`: Log messages are displayed only on the console.
 #          - `"both"`: Log messages are written to both the console and a file.
 #          - `unset`: Defaults to `"both"`.
 #
-#          This variable allows flexible logging behavior depending on the 
+#          This variable allows flexible logging behavior depending on the
 #          environment or use case.
 #
 # @default "both"
 #
 # @example
-# LOG_OUTPUT="file" ./script.sh      # Logs to a file only.
-# LOG_OUTPUT="console" ./script.sh   # Logs to the console only.
-# LOG_OUTPUT="both" ./script.sh      # Logs to both destinations.
+# LOG_OUTPUT="file" ./apconfig.sh      # Logs to a file only.
+# LOG_OUTPUT="console" ./apconfig.sh   # Logs to the console only.
+# LOG_OUTPUT="both" ./apconfig.sh      # Logs to both destinations.
 # -----------------------------------------------------------------------------
 declare LOG_OUTPUT="${LOG_OUTPUT:-both}"  # Default to logging to both console and file.
 
 # -----------------------------------------------------------------------------
 # @var LOG_FILE
 # @brief Specifies the path to the log file.
-# @details Defines the file path where log messages are written when logging 
-#          to a file is enabled. If not explicitly set, this variable defaults 
-#          to blank, meaning no log file will be used unless a specific path 
+# @details Defines the file path where log messages are written when logging
+#          to a file is enabled. If not explicitly set, this variable defaults
+#          to blank, meaning no log file will be used unless a specific path
 #          is assigned at runtime or through an external environment variable.
 #
 # @default ""
 #
 # @example
-# LOG_FILE="/var/log/my_script.log" ./script.sh  # Use a custom log file.
+# LOG_FILE="/var/log/my_script.log" ./apconfig.sh  # Use a custom log file.
 # -----------------------------------------------------------------------------
 declare LOG_FILE="${LOG_FILE:-}"  # Use the provided LOG_FILE or default to blank.
 
 # -----------------------------------------------------------------------------
 # @var LOG_LEVEL
 # @brief Specifies the logging verbosity level.
-# @details Defines the verbosity level for logging messages. This variable 
-#          controls which messages are logged based on their severity. It 
+# @details Defines the verbosity level for logging messages. This variable
+#          controls which messages are logged based on their severity. It
 #          defaults to `"DEBUG"` if not set. Common log levels include:
 #          - `"DEBUG"`: Detailed messages for troubleshooting and development.
 #          - `"INFO"`: Informational messages about normal operations.
@@ -425,7 +487,7 @@ declare LOG_FILE="${LOG_FILE:-}"  # Use the provided LOG_FILE or default to blan
 # @default "DEBUG"
 #
 # @example
-# LOG_LEVEL="INFO" ./script.sh  # Set the log level to INFO.
+# LOG_LEVEL="INFO" ./apconfig.sh  # Set the log level to INFO.
 # -----------------------------------------------------------------------------
 declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"  # Default log level is DEBUG if not set.
 
@@ -433,9 +495,9 @@ declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"  # Default log level is DEBUG if not set
 # @var DEPENDENCIES
 # @type array
 # @brief List of required external commands for the script.
-# @details This array defines the external commands that the script depends on 
-#          to function correctly. Each command in this list is checked for 
-#          availability at runtime. If a required command is missing, the script 
+# @details This array defines the external commands that the script depends on
+#          to function correctly. Each command in this list is checked for
+#          availability at runtime. If a required command is missing, the script
 #          may fail or display an error message.
 #
 #          Best practices:
@@ -444,8 +506,8 @@ declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"  # Default log level is DEBUG if not set
 #
 # @default
 # A predefined set of common system utilities:
-# - `"awk"`, `"grep"`, `"tput"`, `"cut"`, `"tr"`, `"getconf"`, `"cat"`, `"sed"`, 
-#   `"basename"`, `"getent"`, `"date"`, `"printf"`, `"whoami"`, `"touch"`, 
+# - `"awk"`, `"grep"`, `"tput"`, `"cut"`, `"tr"`, `"getconf"`, `"cat"`, `"sed"`,
+#   `"basename"`, `"getent"`, `"date"`, `"printf"`, `"whoami"`, `"touch"`,
 #   `"dpkg"`, `"git"`, `"dpkg-reconfigure"`, `"curl"`, `"wget"`, `"realpath"`.
 #
 # @note Update this list as needed to reflect the actual commands used in the script.
@@ -486,8 +548,8 @@ readonly DEPENDENCIES
 # @var ENV_VARS_BASE
 # @type array
 # @brief Base list of required environment variables.
-# @details Defines the core environment variables that the script relies on, 
-#          regardless of the runtime context. These variables must be set to 
+# @details Defines the core environment variables that the script relies on,
+#          regardless of the runtime context. These variables must be set to
 #          ensure the script functions correctly.
 #
 #          - `HOME`: Specifies the home directory of the current user.
@@ -510,10 +572,10 @@ declare -ar ENV_VARS_BASE=(
 # @var ENV_VARS
 # @type array
 # @brief Final list of required environment variables.
-# @details This array extends `ENV_VARS_BASE` to include additional variables 
-#          required under specific conditions. If the script requires root 
-#          privileges (`REQUIRE_SUDO=true`), the `SUDO_USER` variable is added 
-#          dynamically during runtime. Otherwise, it inherits only the base 
+# @details This array extends `ENV_VARS_BASE` to include additional variables
+#          required under specific conditions. If the script requires root
+#          privileges (`REQUIRE_SUDO=true`), the `SUDO_USER` variable is added
+#          dynamically during runtime. Otherwise, it inherits only the base
 #          environment variables.
 #
 #          - `SUDO_USER`: Identifies the user who invoked the script using `sudo`.
@@ -537,10 +599,10 @@ fi
 # -----------------------------------------------------------------------------
 # @var COLUMNS
 # @brief Terminal width in columns.
-# @details The `COLUMNS` variable represents the width of the terminal in 
-#          characters. It is used for formatting output to fit within the 
-#          terminal's width. If not already set by the environment, it defaults 
-#          to `80` columns. This value can be overridden externally by setting 
+# @details The `COLUMNS` variable represents the width of the terminal in
+#          characters. It is used for formatting output to fit within the
+#          terminal's width. If not already set by the environment, it defaults
+#          to `80` columns. This value can be overridden externally by setting
 #          the `COLUMNS` environment variable before running the script.
 #
 # @default 80
@@ -554,11 +616,11 @@ COLUMNS="${COLUMNS:-80}"  # Default to 80 columns if unset.
 # @var SYSTEM_READS
 # @type array
 # @brief List of critical system files to check.
-# @details Defines the absolute paths to system files that the script depends on 
-#          for its execution. These files must be present and readable to ensure 
+# @details Defines the absolute paths to system files that the script depends on
+#          for its execution. These files must be present and readable to ensure
 #          the script operates correctly. The following files are included:
 #          - `/etc/os-release`: Contains operating system identification data.
-#          - `/proc/device-tree/compatible`: Identifies hardware compatibility, 
+#          - `/proc/device-tree/compatible`: Identifies hardware compatibility,
 #            commonly used in embedded systems like Raspberry Pi.
 #
 # @example
@@ -579,9 +641,9 @@ readonly SYSTEM_READS
 # @var APT_PACKAGES
 # @type array
 # @brief List of required APT packages.
-# @details Defines the APT packages that the script depends on for its execution. 
-#          These packages should be available in the system's default package 
-#          repository. The script will check for their presence and attempt to 
+# @details Defines the APT packages that the script depends on for its execution.
+#          These packages should be available in the system's default package
+#          repository. The script will check for their presence and attempt to
 #          install any missing packages as needed.
 #
 #          Packages included:
@@ -598,15 +660,14 @@ readonly SYSTEM_READS
 # -----------------------------------------------------------------------------
 readonly APT_PACKAGES=(
     "jq"   # JSON parsing utility
-    "git"  # Version control system
 )
 
 # -----------------------------------------------------------------------------
 # @var WARN_STACK_TRACE
 # @type string
 # @brief Flag to enable stack trace logging for warnings.
-# @details Controls whether stack traces are printed alongside warning messages. 
-#          This feature is particularly useful for debugging and tracking the 
+# @details Controls whether stack traces are printed alongside warning messages.
+#          This feature is particularly useful for debugging and tracking the
 #          script's execution path in complex workflows.
 #
 #          Possible values:
@@ -616,8 +677,8 @@ readonly APT_PACKAGES=(
 # @default "false"
 #
 # @example
-# WARN_STACK_TRACE=true ./script.sh  # Enable stack traces for warnings.
-# WARN_STACK_TRACE=false ./script.sh # Disable stack traces for warnings.
+# WARN_STACK_TRACE=true ./apconfig.sh  # Enable stack traces for warnings.
+# WARN_STACK_TRACE=false ./apconfig.sh # Disable stack traces for warnings.
 # -----------------------------------------------------------------------------
 readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if not set.
 
@@ -633,7 +694,7 @@ readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if no
 # @param $1 The number to pad (e.g., "7").
 # @param $2 (Optional) The width of the output (default is 4). If debug is provided here, it will be considered the debug flag.
 # @param $3 (Optional) The debug flag. Pass "debug" to enable debug output.
-# 
+#
 # @return The padded number with spaces as a string.
 # -----------------------------------------------------------------------------
 pad_with_spaces() {
@@ -644,7 +705,7 @@ pad_with_spaces() {
     local func_name="${FUNCNAME[0]}"
     local caller_name="${FUNCNAME[1]}"
     local caller_line="${BASH_LINENO[0]}"
- 
+
     # If the second parameter is "debug", adjust the arguments
     if [[ "$width" == "debug" ]]; then
         debug="$width"
@@ -770,11 +831,11 @@ stack_trace() {
 
 # -----------------------------------------------------------------------------
 # @brief Logs a warning or error message with optional details and a stack trace.
-# @details This function logs messages at the `WARNING` or `ERROR` level, with 
-#          support for an optional stack trace for warnings. It appends the error 
+# @details This function logs messages at the `WARNING` or `ERROR` level, with
+#          support for an optional stack trace for warnings. It appends the error
 #          level (numeric) and additional details to the log message if provided.
 #
-#          Stack traces are included for warnings if `WARN_STACK_TRACE` is set 
+#          Stack traces are included for warnings if `WARN_STACK_TRACE` is set
 #          to `true`. The function uses `BASH_LINENO` to identify the call stack.
 #
 # @param $1 [Optional] Numeric error level. Defaults to `0` if not provided.
@@ -876,8 +937,8 @@ die() {
 
 # -----------------------------------------------------------------------------
 # @brief Add a dot (`.`) at the beginning of a string if it's missing.
-# @details This function ensures the input string starts with a leading dot. 
-#          If the input string is empty, the function logs a warning and returns 
+# @details This function ensures the input string starts with a leading dot.
+#          If the input string is empty, the function logs a warning and returns
 #          an error code.
 #
 # @param $1 The input string to process.
@@ -909,8 +970,8 @@ add_dot() {
 
 # -----------------------------------------------------------------------------
 # @brief Remove a leading dot (`.`) from a string if present.
-# @details This function processes the input string and removes a leading dot 
-#          if it exists. If the input string is empty, the function logs an error 
+# @details This function processes the input string and removes a leading dot
+#          if it exists. If the input string is empty, the function logs an error
 #          and returns an error code.
 #
 # @param $1 The input string to process.
@@ -942,8 +1003,8 @@ remove_dot() {
 
 # -----------------------------------------------------------------------------
 # @brief Add a trailing slash (`/`) to a string if it's missing.
-# @details This function ensures that the input string ends with a trailing slash. 
-#          If the input string is empty, the function logs an error and returns 
+# @details This function ensures that the input string ends with a trailing slash.
+#          If the input string is empty, the function logs an error and returns
 #          an error code.
 #
 # @param $1 The input string to process.
@@ -975,8 +1036,8 @@ add_slash() {
 
 # -----------------------------------------------------------------------------
 # @brief Remove a trailing slash (`/`) from a string if present.
-# @details This function ensures that the input string does not end with a trailing 
-#          slash. If the input string is empty, the function logs an error and 
+# @details This function ensures that the input string does not end with a trailing
+#          slash. If the input string is empty, the function logs an error and
 #          returns an error code.
 #
 # @param $1 The input string to process.
@@ -1006,14 +1067,27 @@ remove_slash() {
     printf "%s\n" "$input"
 }
 
+# -----------------------------------------------------------------------------
+# @brief Pauses execution and waits for user input to continue.
+# @details This function displays a message prompting the user to press any key
+#          to continue. It waits for a single key press, then resumes execution.
+#
+# @example
+# pause
+# -----------------------------------------------------------------------------
+pause() {
+    printf "Press any key to continue.\n"
+    read -n 1 -sr < /dev/tty || true
+}
+
 ############
 ### Print/Display Environment Functions
 ############
 
 # -----------------------------------------------------------------------------
 # @brief Print the system information to the log.
-# @details Extracts and logs the system's name and version using information 
-#          from `/etc/os-release`. If the information cannot be extracted, logs 
+# @details Extracts and logs the system's name and version using information
+#          from `/etc/os-release`. If the information cannot be extracted, logs
 #          a warning message. Includes debug output when the `debug` argument is provided.
 #
 # @param $1 [Optional] Debug flag to enable detailed output (`debug`).
@@ -1061,9 +1135,9 @@ print_system() {
 # -----------------------------------------------------------------------------
 # @brief Print the script version and optionally log it.
 # @details This function displays the version of the script stored in the global
-#          variable `SEM_VER`. If called by `parse_args`, it uses `printf` to 
-#          display the version; otherwise, it logs the version using `logI`. 
-#          If the debug flag is set to "debug," additional debug information 
+#          variable `SEM_VER`. If called by `parse_args`, it uses `printf` to
+#          display the version; otherwise, it logs the version using `logI`.
+#          If the debug flag is set to "debug," additional debug information
 #          will be printed.
 #
 # @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
@@ -1102,7 +1176,7 @@ print_version() {
 # -----------------------------------------------------------------------------
 # @brief Print the system information to the log.
 # @details Extracts and logs the system's name and version using information
-#          from `/etc/os-release`. Includes debug output when the `debug` 
+#          from `/etc/os-release`. Includes debug output when the `debug`
 #          argument is provided.
 #
 # @param $1 [Optional] Debug flag to enable detailed output (debug).
@@ -1150,8 +1224,8 @@ print_system() {
 
 # -----------------------------------------------------------------------------
 # @brief Determine the script's execution context.
-# @details Identifies how the script was executed, returning one of the 
-#          predefined context codes. Handles errors gracefully and outputs 
+# @details Identifies how the script was executed, returning one of the
+#          predefined context codes. Handles errors gracefully and outputs
 #          additional debugging information when the "debug" argument is passed.
 #
 # Context Codes:
@@ -1163,10 +1237,10 @@ print_system() {
 #
 # @param $1 [Optional] Pass "debug" to enable verbose logging for debugging purposes.
 #
-# @throws Exits with an error if the script path cannot be resolved or 
+# @throws Exits with an error if the script path cannot be resolved or
 #         directory traversal exceeds the maximum depth.
 #
-# @return Returns a context code (described above) indicating the script's 
+# @return Returns a context code (described above) indicating the script's
 #         execution context.
 # -----------------------------------------------------------------------------
 determine_execution_context() {
@@ -1246,9 +1320,9 @@ determine_execution_context() {
 
 # -----------------------------------------------------------------------------
 # @brief Handle the execution context of the script.
-# @details Determines the script's execution context by invoking 
-#          `determine_execution_context` and sets global variables based on 
-#          the context. Outputs debug information if the "debug" argument is 
+# @details Determines the script's execution context by invoking
+#          `determine_execution_context` and sets global variables based on
+#          the context. Outputs debug information if the "debug" argument is
 #          passed. Provides safeguards for unknown or invalid context codes.
 #
 # @param $1 [Optional] Pass "debug" to enable verbose logging for debugging purposes.
@@ -1602,7 +1676,7 @@ check_sh_ver() {
         [[ "$debug" == "debug" ]] && printf "[DEBUG] Bash version check is disabled (MIN_BASH_VERSION='none').\n" >&2
     else
         [[ "$debug" == "debug" ]] && printf "[DEBUG] Minimum required Bash version is set to '%s'.\n" "$required_version" >&2
-        
+
         # Extract the major and minor version components from the required version
         local required_major="${required_version%%.*}"
         local required_minor="${required_version#*.}"
@@ -1612,7 +1686,7 @@ check_sh_ver() {
         [[ "$debug" == "debug" ]] && printf "[DEBUG] Current Bash version is %d.%d.\n" "${BASH_VERSINFO[0]}" "${BASH_VERSINFO[1]}" >&2
 
         # Compare the current Bash version with the required version
-        if (( BASH_VERSINFO[0] < required_major || 
+        if (( BASH_VERSINFO[0] < required_major ||
               (BASH_VERSINFO[0] == required_major && BASH_VERSINFO[1] < required_minor) )); then
             [[ "$debug" == "debug" ]] && printf "[DEBUG] Current Bash version does not meet the requirement.\n" >&2
             die 1 "This script requires Bash version $required_version or newer."
@@ -1625,7 +1699,7 @@ check_sh_ver() {
 
 # -----------------------------------------------------------------------------
 # @brief Check system bitness compatibility.
-# @details Validates whether the current system's bitness matches the supported 
+# @details Validates whether the current system's bitness matches the supported
 #          configuration. Outputs debug information if debug mode is enabled.
 #
 # @param $1 [Optional] "debug" to enable verbose output for the check.
@@ -1684,7 +1758,7 @@ check_bitness() {
 
 # -----------------------------------------------------------------------------
 # @brief Check Raspbian OS version compatibility.
-# @details This function ensures that the Raspbian version is within the supported 
+# @details This function ensures that the Raspbian version is within the supported
 #          range and logs an error if the compatibility check fails.
 #
 # @param $1 [Optional] "debug" to enable verbose output for this check.
@@ -1910,9 +1984,9 @@ validate_proxy() {
 
 # -----------------------------------------------------------------------------
 # @brief Check connectivity to a URL using a specified tool.
-# @details Attempts to connect to a given URL with `curl` or `wget` based on the 
-#          provided arguments. Ensures that the tool's availability is checked 
-#          and handles timeouts gracefully. Optionally prints debug information 
+# @details Attempts to connect to a given URL with `curl` or `wget` based on the
+#          provided arguments. Ensures that the tool's availability is checked
+#          and handles timeouts gracefully. Optionally prints debug information
 #          if the "debug" flag is set.
 #
 # @param $1 The URL to test.
@@ -2115,9 +2189,9 @@ print_log_entry() {
 # -----------------------------------------------------------------------------
 # @brief Generate a timestamp and line number for log entries.
 #
-# @details This function retrieves the current timestamp and the line number of 
-#          the calling script. If the optional debug flag is provided, it will 
-#          print debug information, including the function name, caller's name, 
+# @details This function retrieves the current timestamp and the line number of
+#          the calling script. If the optional debug flag is provided, it will
+#          print debug information, including the function name, caller's name,
 #          and the line number where the function was called.
 #
 # @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
@@ -2260,7 +2334,7 @@ log_message() {
 
 # -----------------------------------------------------------------------------
 # @brief Log a message with the specified severity level.
-# @details This function logs messages at the specified severity level and 
+# @details This function logs messages at the specified severity level and
 #          handles extended details and debug information if provided.
 #
 # @param $1 Severity level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL).
@@ -2374,7 +2448,7 @@ logX() { log_message_with_severity "EXTENDED" "$1" "${2:-}" "${3:-}"; }
 # -----------------------------------------------------------------------------
 # @brief Ensure the log file exists and is writable, with fallback to `/tmp` if necessary.
 # @details This function validates the specified log file's directory to ensure it exists and is writable.
-#          If the directory is invalid or inaccessible, it attempts to create it. If all else fails, 
+#          If the directory is invalid or inaccessible, it attempts to create it. If all else fails,
 #          the log file is redirected to `/tmp`. A warning message is logged if fallback is used.
 #
 # @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
@@ -2420,6 +2494,13 @@ init_log() {
         if ! touch "$LOG_FILE" &>/dev/null; then
             logW "Cannot create log file: $LOG_FILE"
             log_dir="/tmp"
+        else
+            # Change ownership of the log file if possible
+            if [[ -n "${SUDO_USER:-}" && "${REQUIRE_SUDO:-true}" == "true" ]]; then
+                chown "$SUDO_USER:$SUDO_USER" "$LOG_FILE" &>/dev/null || logW "Failed to set ownership to SUDO_USER: $SUDO_USER"
+            else
+                chown "$(whoami):$(whoami)" "$LOG_FILE" &>/dev/null || logW "Failed to set ownership to current user: $(whoami)"
+            fi
         fi
     else
         log_dir="/tmp"
@@ -2689,7 +2770,7 @@ setup_log() {
     # Debug message for log properties initialization
     if [[ "$debug" == "debug" ]]; then
         printf "[DEBUG] Log properties initialized:\n" >&2
-        
+
         # Iterate through LOG_PROPERTIES to print each level with its color
         for level in "${!LOG_PROPERTIES[@]}"; do
             IFS="|" read -r custom_level color severity <<< "${LOG_PROPERTIES[$level]}"
@@ -3102,7 +3183,7 @@ get_num_commits() {
     commit_count=$(git rev-list --count "${tag}..HEAD" 2>/dev/null || echo 0)
 
     # Debug log: function exit
-    [[ "$debug" == "debug" ]] && printf "[DEBUG] Exiting function '%s()'m %d commits since tag %s.\n" "$commit_count" "$tag" >&2
+    [[ "$debug" == "debug" ]] && printf "[DEBUG] Exiting function '%s()'.\n" "$func_name" >&2
 
     printf "%s\n" "$commit_count"
 }
@@ -3170,7 +3251,7 @@ get_dirty() {
     if [[ -n "${changes:-}" ]]; then
         printf "true\n"
     else
-        
+
         printf "false\n"
     fi
 
@@ -3462,12 +3543,12 @@ set_time() {
     while true; do
         read -rp "Is this correct? [y/N]: " yn < /dev/tty
         case "$yn" in
-            [Yy]*) 
+            [Yy]*)
                 logI "Timezone confirmed on $current_date"
                 [[ "$debug" == "debug" ]] && printf "[DEBUG] Timezone confirmed on: $current_date\n" >&2
                 break
                 ;;
-            [Nn]* | *) 
+            [Nn]* | *)
                 dpkg-reconfigure tzdata
                 logI "Timezone reconfigured on $current_date"
                 [[ "$debug" == "debug" ]] && printf "[DEBUG] Timezone reconfigured on: $current_date\n" >&2
@@ -3481,112 +3562,161 @@ set_time() {
 }
 
 # -----------------------------------------------------------------------------
-# @brief Execute a command and return its success or failure.
-# @details This function executes a given command, logs its status, and optionally
-#          prints status messages to the console depending on the value of `USE_CONSOLE`.
-#          It returns `true` for success or `false` for failure.
+# @brief Execute a new shell operation (departs this script).
+# @details Executes or simulates a shell command based on the DRY_RUN flag.
+#          Supports optional debugging to trace the execution process.
 #
-# @param $1 The name/message for the operation.
-# @param $2 The command/process to execute.
-# @param $3 [Optional] Debug flag. Pass "debug" to enable verbose output.
-# 
-# @global DRY_RUN If set to "true", simulates the command execution.
-# @global USE_CONSOLE If set to "false", suppresses console output.
+# @param $1 Name of the operation or process (for reference in logs).
+# @param $2 The shell command to execute.
+# @param $3 Optional debug flag ("debug" to enable debug output).
 #
-# @return Returns 0 (true) if the command succeeds, or non-zero (false) if it fails.
+# @global FUNCNAME Used to fetch the current and caller function names.
+# @global BASH_LINENO Used to fetch the calling line number.
+# @global DRY_RUN When set, simulates command execution instead of running it.
+#
+# @throws Exits with a non-zero status if the command execution fails.
+#
+# @return None.
 #
 # @example
-# exec_command "Update Package" "sudo apt-get update"
+# DRY_RUN=true exec_new_shell "ListFiles" "ls -l" "debug"
 # -----------------------------------------------------------------------------
-exec_command() {
-    # Debug setup
-    local debug="${3:-}"  # Optional debug flag, defaults to an empty string if not provided
+exec_new_shell() {
+    local exec_name="${1:-Unnamed Operation}"
+    local exec_process="${2:-true}"
+    local debug="${3:-}"
+
     local func_name="${FUNCNAME[0]}"
     local caller_name="${FUNCNAME[1]}"
     local caller_line="${BASH_LINENO[0]}"
-    # Print debug information if the flag is set
+
+    # Validate debug flag
+    if [[ -n "$debug" && "$debug" != "debug" ]]; then
+        warn "Invalid debug flag: '$debug'. Use 'debug' or leave blank."
+        debug=""
+    fi
+
+    # Debug information
     [[ "$debug" == "debug" ]] && printf "[DEBUG] Function '%s()' called by '%s()' at line %s.\n" "$func_name" "$caller_name" "$caller_line" >&2
+    [[ "$debug" == "debug" ]] && printf "[DEBUG] exec_name: %s\n" "$exec_name" >&2
+    [[ "$debug" == "debug" ]] && printf "[DEBUG] exec_process: %s\n" "$exec_process" >&2
 
-    # Input arguments
-    local result                    # To store the exit status of the command
-    local exec_name="$1"            # The name/message for the operation
-    local exec_process="$2"         # The command/process to execute
-    # Validate exec_process
-    if [[ -z "$exec_process" ]]; then
-        warn "No command provided to execute (exec_process is empty)." >&2
-        return 1
-    fi
-    # Use exec_process as exec_name if exec_name is blank
-    if [[ -z "$exec_name" ]]; then
-        exec_name="$exec_process"
+    # Simulate command execution if DRY_RUN is enabled
+    if [[ -n "$DRY_RUN" ]]; then
+        printf "[✔] Simulating: '%s'.\n" "$exec_process"
+        [[ "$debug" == "debug" ]] && printf "[DEBUG] Dry-run simulation complete: '%s'.\n" "$exec_process" >&2
+        exit_script
     fi
 
-    # Prefixes for logging
+    # Validate the command
+    if [[ "$exec_process" == "true" || "$exec_process" == "" ]]; then
+        printf "[✔] Running: '%s'.\n" "$exec_process"
+        [[ "$debug" == "debug" ]] && printf "[DEBUG] Executing command: '%s' in function '%s()' at line %s.\n" "$exec_process" "$func_name" "$caller_line" >&2
+        exec true
+    elif ! command -v "${exec_process%% *}" >/dev/null 2>&1; then
+        warn "'$exec_process' is not a valid command or executable."
+        [[ "$debug" == "debug" ]] && printf "[DEBUG] Exiting function '%s()' at line %s.\n" "$func_name" "$caller_line" >&2
+        die 1 "Invalid command: '$exec_process'"
+    else
+        # Execute the actual command
+        printf "[✔] Running: '%s'.\n" "$exec_process"
+        [[ "$debug" == "debug" ]] && printf "[DEBUG] Executing command: '%s' in function '%s()' at line %s.\n" "$exec_process" "$func_name" "$caller_line" >&2
+        exec $exec_process || die 1 "Command '${exec_process}' failed"
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Executes a command in a separate Bash process.
+# @details This function manages the execution of a shell command, handling
+#          the display of status messages. It supports dry-run mode, where
+#          the command is simulated without execution. The function prints 
+#          success or failure messages and handles the removal of the "Running"
+#          line once the command finishes.
+#
+# @param exec_name The name of the command or task being executed.
+# @param exec_process The command string to be executed.
+# @param debug Optional flag to enable debug messages. Set to "debug" to enable.
+#
+# @return Returns 0 if the command was successful, non-zero otherwise.
+#
+# @note The function supports dry-run mode, controlled by the DRY_RUN variable.
+#       When DRY_RUN is true, the command is only simulated without actual execution.
+#
+# @example
+# exec_command "Test Command" "echo Hello World" "debug"
+# -----------------------------------------------------------------------------
+exec_command() {
+    local exec_name="$1"
+    local exec_process="$2"
+    local debug="${3:-}"
+
+    local func_name="${FUNCNAME[0]}"
+    local caller_name="${FUNCNAME[1]}"
+    local caller_line="${BASH_LINENO[0]}"
+
+    # Validate debug flag
+    if [[ -n "$debug" && "$debug" != "debug" ]]; then
+        warn "Invalid debug flag: '$debug'. Use 'debug' or leave blank."
+        debug=""
+    fi
+
+    # Debug information
+    [[ "$debug" == "debug" ]] && printf "[DEBUG] Function '%s()' called by '%s()' at line %s.\n" "$func_name" "$caller_name" "$caller_line" >&2
+    [[ "$debug" == "debug" ]] && printf "[DEBUG] exec_name: %s\n" "$exec_name" >&2
+    [[ "$debug" == "debug" ]] && printf "[DEBUG] exec_process: %s\n" "$exec_process" >&2
+
+    # Basic status prefixes
     local running_pre="Running"
     local complete_pre="Complete"
     local failed_pre="Failed"
-    if [[ "${DRY_RUN}" == "true" ]]; then
-        local dry=" (dry)"
-        running_pre+="$dry"
-        complete_pre+="$dry"
-        failed_pre+="$dry"
+
+    # If DRY_RUN is enabled, show that in the prefix
+    if [[ "$DRY_RUN" == "true" ]]; then
+        running_pre+=" (dry)"
+        complete_pre+=" (dry)"
+        failed_pre+=" (dry)"
     fi
     running_pre+=":"
     complete_pre+=":"
     failed_pre+=":"
 
-    # Log the running message to file
-    logI "$running_pre '$exec_name'."
+    # 1) Print ephemeral “Running” line
+    printf "%b[-]%b %s %s\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
+    # Optionally ensure it shows up (especially if the command is super fast):
+    sleep 0.02
 
-    if [[ "${DRY_RUN}" == "true" ]] && [[ "$debug" == "debug" ]] ; then
-        printf "[DEBUG] DRY_RUN enabled. Simulated execution for: '%s'\n" "$exec_name" >&2
+    # 2) If DRY_RUN == "true", skip real exec
+    if [[ "$DRY_RUN" == "true" ]]; then
+        # Move up & clear ephemeral line
+        printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
+        printf "%b[✔]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
+        return 0
     fi
 
-    # Print to console if CONSOLE_STATE is true
-    if [[ "${CONSOLE_STATE}" == "true" ]]; then
-        printf "%b[-]%b\t%s %s.\n" "${FGGLD}${BOLD}" "$RESET" "$running_pre" "$exec_name"
-    fi
+    # 3) Actually run the command (stdout/stderr handling is up to you):
+    bash -c "$exec_process" &>/dev/null
+    local status=$?
 
-    # Simulate or execute the command
-    if [[ "${DRY_RUN}" == "true" ]]; then
-        sleep 1  # Simulate execution delay
-        result=0 # Simulate success
+    # 4) Move up & clear ephemeral “Running” line
+    printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
+
+    # 5) Print final success/fail
+    if [[ $status -eq 0 ]]; then
+        printf "%b[✔]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
     else
-        # Execute the task command and capture the result
-        eval "$exec_process" > /dev/null 2>&1
-        result=$?
-    fi
-
-    # Move the cursor up and clear the entire line if USE_CONSOLE is false
-    if [[ "${CONSOLE_STATE}" == "true" ]]; then
-        printf "%s" "$MOVE_UP"
-    fi
-
-    # Handle success or failure
-    if [[ "$result" -eq 0 ]]; then
-        # Success
-        if [[ "${CONSOLE_STATE}" == "true" ]]; then
-            printf "%b[✔]%b\t%s %s.\n" "${FGGRN}${BOLD}" "${RESET}" "$complete_pre" "$exec_name"
+        printf "%b[✘]%b %s %s.\n" "${FGRED}" "${RESET}" "$failed_pre" "$exec_name"
+        # If specifically “command not found” exit code:
+        if [[ $status -eq 127 ]]; then
+            warn "Command not found: $exec_process"
+        else
+            warn "Command failed with status $status: $exec_process"
         fi
-        logI "$complete_pre '$exec_name'."
-        [[ "$debug" == "debug" ]] && printf "[DEBUG] Command succeeded: '%s'\n" "$exec_name" >&2
-    else
-        # Failure
-        if [[ "${CONSOLE_STATE}" == "true" ]]; then
-            printf "%b[✘]%b\t%s %s (%s).\n" "${FGRED}${BOLD}" "${RESET}" "$failed_pre" "$exec_name" "$result"
-        fi
-        logE "$failed_pre '$exec_name'."
-        [[ "$debug" == "debug" ]] && printf "[DEBUG] Command failed: '%s' with exit code %d\n" "$exec_name" "$result" >&2
-    fi
-
-    if [[ "${DRY_RUN}" == "true" ]] && [[ "$debug" == "debug" ]] ; then
-        printf "[DEBUG] Simulated execution for '%s' returned (%d).\n" "$exec_name" $result >&2
     fi
 
     # Debug log: function exit
     [[ "$debug" == "debug" ]] && printf "[DEBUG] Exiting function '%s()'.\n" "$func_name" >&2
 
-    return "$result"
+    return $status
 }
 
 # -----------------------------------------------------------------------------
@@ -3706,7 +3836,7 @@ finish_script() {
 # -----------------------------------------------------------------------------
 # @brief Exit the script gracefully.
 # @details Logs a provided exit message or uses a default message and exits with
-#          a status code of 0. If the debug flag is set to "debug," it outputs 
+#          a status code of 0. If the debug flag is set to "debug," it outputs
 #          additional debug information.
 #
 # @param $1 [Optional] Message to log before exiting. Defaults to "Exiting."
@@ -3825,11 +3955,12 @@ parse_args() {
     local func_name="${FUNCNAME[0]}"
     local caller_name="${FUNCNAME[1]}"
     local caller_line="${BASH_LINENO[0]}"
+    local debug=""
+
     # Check for the "debug" argument anywhere
     for arg in "$@"; do
         if [[ "$arg" == "debug" ]]; then
             debug="debug"
-            shift
             break
         fi
     done
@@ -3838,11 +3969,12 @@ parse_args() {
     [[ "$debug" == "debug" ]] && printf "[DEBUG] Function '%s()' called by '%s()' at line %s.\n" "$func_name" "$caller_name" "$caller_line" >&2
 
     # Process the arguments
-    for arg in "$@"; do
-        case "$arg" in
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
             --dry-run|-d)
                 DRY_RUN=true
                 [[ "$debug" == "debug" ]] && printf "[DEBUG] DRY_RUN set to 'true'\n" >&2
+                shift
                 ;;
             --version|-v)
                 print_version "$debug"
@@ -3853,45 +3985,1351 @@ parse_args() {
                 exit 0
                 ;;
             --log-file|-f)
-                LOG_FILE=$(realpath -m "${filtered_args[1]}" 2>/dev/null)
-                [[ "$debug" == "debug" ]] && printf "[DEBUG] LOG_FILE set to '%s'\n" "$LOG_FILE" >&2
-                filtered_args=("${filtered_args[@]:1}") # Remove the processed value
+                if [[ -n "$2" && "$2" != -* ]]; then
+                    LOG_FILE=$(realpath -m "$2" 2>/dev/null)
+                    [[ "$debug" == "debug" ]] && printf "[DEBUG] LOG_FILE set to '%s'\n" "$LOG_FILE" >&2
+                    shift 2 # Shift past the option and its value
+                else
+                    printf "[ERROR] Option '%s' requires an argument.\n" "$1" >&2
+                    exit 1
+                fi
                 ;;
             --log-level|-l)
-                LOG_LEVEL="${filtered_args[1]}"
-                [[ "$debug" == "debug" ]] && printf "[DEBUG] LOG_LEVEL set to '%s'\n" "$LOG_LEVEL" >&2
-                filtered_args=("${filtered_args[@]:1}") # Remove the processed value
+                if [[ -n "$2" && "$2" != -* ]]; then
+                    LOG_LEVEL="$2"
+                    [[ "$debug" == "debug" ]] && printf "[DEBUG] LOG_LEVEL set to '%s'\n" "$LOG_LEVEL" >&2
+                    shift 2 # Shift past the option and its value
+                else
+                    printf "[ERROR] Option '%s' requires an argument.\n" "$1" >&2
+                    exit 1
+                fi
                 ;;
             --terse|-t)
                 TERSE="true"
                 [[ "$debug" == "debug" ]] && printf "[DEBUG] TERSE set to 'true'\n" >&2
+                shift
                 ;;
             --console|-c)
                 USE_CONSOLE="true"
                 [[ "$debug" == "debug" ]] && printf "[DEBUG] USE_CONSOLE set to 'true'\n" >&2
+                shift
                 ;;
             *)
-                printf "Unknown option: %s\n" "${filtered_args[0]}"
+                if [[ -n "${1-}" ]]; then
+                    printf "[ERROR] Unknown option: %s\n" "$1" >&2
+                else
+                    printf "[ERROR] No option provided.\n" >&2
+                fi
                 usage "$debug"
                 exit 1
                 ;;
         esac
-        filtered_args=("${filtered_args[@]:1}") # Shift the processed argument
     done
 
+    # Debug: Final parsed values
     if [[ "$debug" == "debug" ]]; then
         printf "[DEBUG] Final parsed values:\n" >&2
-        printf "\t- DRY_RUN='%s'\n\t- LOG_FILE='%s'\n\t- LOG_LEVEL='%s'\n\t- ERSE='%s'\n\t- USE_CONSOLE='%s'\n" \
+        printf "\t- DRY_RUN='%s'\n\t- LOG_FILE='%s'\n\t- LOG_LEVEL='%s'\n\t- TERSE='%s'\n\t- USE_CONSOLE='%s'\n" \
             "${DRY_RUN:-false}" "${LOG_FILE:-None}" "${LOG_LEVEL:-None}" "${TERSE:-false}" "${USE_CONSOLE:-false}" >&2
     fi
 
-    # Debug log: function exit
+    # Debug: Function exit
     [[ "$debug" == "debug" ]] && printf "[DEBUG] Exiting function '%s()'.\n" "$func_name" >&2
 }
 
 # ############
-# ### App-specific Installer Functions Here
+# ### AP-Config Functions
 # ############
+
+#
+# ### AP-Config Core Functions
+#
+
+# -----------------------------------------------------------------------------
+# @brief Configure a new WiFi network or modify an existing one.
+# @details Scans for available WiFi networks, allowing the user to add a new 
+#          network or change the password for an existing one. Handles retries 
+#          if the WiFi device is busy and validates user input for network selection.
+#
+# @global CONFIG_FILE Path to the configuration file for WiFi settings.
+# @global WIFI_INTERFACE The network interface used for WiFi scanning.
+# @global FGYLW Terminal formatting for yellow foreground.
+# @global BOLD Terminal formatting for bold text.
+# @global RESET Terminal formatting reset sequence.
+#
+# @return None
+# @throws Logs an error and returns if the WiFi device is unavailable or no 
+#         networks are detected.
+#
+# @example
+# setup_wifi_network
+# Output:
+#   Detected WiFi networks:
+#   1) Network_A
+#   2) Network_B
+#   .
+#   Enter the number corresponding to the network you wish to configure:
+# -----------------------------------------------------------------------------
+setup_wifi_network() {
+    local wifi_list=()
+    local selection=""
+    local attempts=0
+    local max_attempts=5
+
+    if [ ! -f "$CONFIG_FILE" ]; then
+        logW "Config file not yet present, install script from menu first."
+        return
+    fi
+
+    printf "${FGYLW}${BOLD}Add or modify a WiFi Network${RESET}\n"
+    printf "\nScanning for available WiFi networks.\n"
+
+    # Scan for WiFi networks, retrying if the device is busy
+    while [ "$attempts" -lt "$max_attempts" ]; do
+        IFS=$'\n' wifi_list=($(iw dev "$WIFI_INTERFACE" scan ap-force | grep -E "SSID:" | sed 's/SSID: //'))
+        if [ "${#wifi_list[@]}" -gt 0 ]; then
+            break
+        elif [ "$attempts" -ge "$((max_attempts - 1))" ]; then
+            logE "WiFi device is unavailable. Unable to scan for networks at this time." \
+                "Please check your device and try again later."
+            return
+        else
+            printf "WiFi device is busy or temporarily unavailable. Retrying in 2 seconds.\n"
+            attempts=$((attempts + 1))
+            sleep 2
+        fi
+    done
+
+    # Display scanned networks
+    if [ "${#wifi_list[@]}" -eq 0 ]; then
+        printf "No WiFi networks detected. There may be a temporary issue with the device or signal.\n"
+        printf "Press any key (or wait 5 seconds) to continue.\n"
+        read -n 1 -t 5 -sr < /dev/tty || true
+        return
+    fi
+
+    printf "\nDetected WiFi networks:\n"
+    for i in "${!wifi_list[@]}"; do
+        local trimmed_entry=$(printf "%s" "${wifi_list[i]}" | xargs)
+        printf "%d)\t%s\n" $((i + 1)) "$trimmed_entry"
+    done
+    printf "%d)\tCancel\n" "$(( ${#wifi_list[@]} + 1 ))"
+
+    # User selection
+    while true; do
+        printf "\nEnter the number corresponding to the network you wish to configure:\n"
+        read -n 1 -sr selection < /dev/tty || true
+
+        if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "$(( ${#wifi_list[@]} + 1 ))" ]; then
+            if [ "$selection" -eq "$(( ${#wifi_list[@]} + 1 ))" ]; then
+                printf "\nOperation canceled.\n"
+                return
+            else
+                update_wifi_profile "${wifi_list[$((selection - 1))]}"
+                return
+            fi
+        elif [[ -z "$selection" ]]; then
+            printf "No selection, exiting to menu.\n"
+            return
+        else
+            logW "Invalid selection. Please try again."
+        fi
+    done
+}
+
+# -----------------------------------------------------------------------------
+# @brief Toggle between WiFi and Access Point modes using the AP Pop-Up script.
+# @details
+# - Runs the AP Pop-Up script directly to switch between network modes.
+# - Provides feedback if the script is unavailable or not installed.
+#
+# @global SCRIPT_NAME The name of the AP Pop-Up script.
+# @global APP_PATH    The full path to the AP Pop-Up script.
+# @return None
+# -----------------------------------------------------------------------------
+switch_between_wifi_and_ap() {
+    # clear
+    logI "Switching between WiFi and Access Point."
+
+    # Check if the script is available and execute it
+    if which "$SCRIPT_NAME" &>/dev/null; then
+        exec_command "Calling $SCRIPT_NAME" "$APP_PATH"
+    else
+        warn "$SCRIPT_NAME not available. Install first."
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Update the Access Point (AP) IP address and Gateway in the configuration file.
+# @details Allows the user to select a base IP range, enter the third and fourth 
+#          octets, and validates the resulting IP and gateway settings. Updates 
+#          the configuration file if changes are confirmed.
+#
+# @global AP_CIDR The current AP IP range in CIDR format.
+# @global AP_GATEWAY The current AP Gateway.
+# @global CONFIG_FILE Path to the configuration file.
+#
+# @return None
+# -----------------------------------------------------------------------------
+update_access_point_ip() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        # clear
+        logW "Config file not yet present, install script from menu first."
+        return
+    fi
+    # clear
+
+    local choice third_octet fourth_octet base new_ip new_gateway confirm
+
+    # Display current AP configuration
+    cat << EOF
+
+>> ${FGYLW}Current AP IP:${RESET} ${FGGRN}$AP_CIDR${RESET}
+>> ${FGYLW}Current AP GW:${RESET} ${FGGRN}$AP_GATEWAY${RESET}
+
+Choose a new network:
+    1) 192.168.xxx.xxx
+    2) 10.0.xxx.xxx
+    3) Cancel
+
+EOF
+
+    read -n 1 -t 5 -sr choice < /dev/tty || true
+    printf "\n"
+    case "$choice" in
+        1) base="192.168." ;;
+        2) base="10.0." ;;
+        3) return ;;
+        *) logW "Invalid selection." ; return ;;
+    esac
+
+    printf "\nEnter the third octet (0-255):\n"
+    read -r third_octet < /dev/tty
+    if ! validate_host_number "$third_octet" 255; then return; fi
+
+    printf "\nEnter the fourth octet (0-253):\n"
+    read -r fourth_octet < /dev/tty
+    if ! validate_host_number "$fourth_octet" 253; then return; fi
+
+    third_octet=$((10#$third_octet))
+    fourth_octet=$((10#$fourth_octet))
+
+    new_ip="${base}${third_octet}.${fourth_octet}/24"
+    new_gateway="${base}${third_octet}.254"
+
+    if ! validate_subnet "$new_ip" "$new_gateway"; then return; fi
+
+    printf "\nValidating network configuration, this will take a moment.\n"
+    if ! validate_ap_configuration "$new_ip" "$new_gateway"; then return; fi
+
+    cat << EOF
+
+<< ${FGYLW}New AP IP will be:${RESET} ${FGGRN}$new_ip${RESET}
+<< ${FGYLW}New AP GW will be:${RESET} ${FGGRN}$new_gateway${RESET}
+
+EOF
+
+    printf "Apply these changes? (y/N): "
+    read -n 1 -t 5 -sr confirm < /dev/tty || true
+    printf "\n"
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        sed -i "s|^AP_CIDR=.*|AP_CIDR=\"$new_ip\"|" "$CONFIG_FILE"
+        sed -i "s|^AP_GATEWAY=.*|AP_GATEWAY=\"$new_gateway\"|" "$CONFIG_FILE"
+        AP_CIDR="$new_ip"
+        AP_GATEWAY="$new_gateway"
+        printf "Changes applied successfully.\n"
+    else
+        logI "Changes canceled."
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Update the Access Point (AP) SSID and Password in the configuration file.
+# @details Prompts the user to enter a new SSID and/or password for the AP, validates 
+#          the inputs, and updates the configuration file accordingly. 
+#          Ensures that SSIDs and passwords meet character and length requirements.
+#
+# @global AP_SSID The current AP SSID.
+# @global AP_PASSWORD The current AP password.
+# @global CONFIG_FILE Path to the configuration file.
+#
+# @return None
+# -----------------------------------------------------------------------------
+update_access_point_ssid() {
+    # clear
+
+    cat << EOF
+
+>> ${FGYLW}Current AP SSID:${RESET} ${FGGRN}$AP_SSID${RESET}
+
+Enter new SSID (1-32 characters, no leading/trailing spaces, Enter to keep current):
+EOF
+    read -r new_ssid < /dev/tty
+
+    # Trim and validate SSID
+    new_ssid=$(printf "%s" "$new_ssid" | xargs | sed -e 's/^"//' -e 's/"$//')
+    if [[ -n "$new_ssid" ]]; then
+        if [[ ${#new_ssid} -ge 1 && ${#new_ssid} -le 32 && "$new_ssid" =~ ^[[:print:]]+$ && "$new_ssid" != *" "* ]]; then
+            AP_SSID="$new_ssid"
+            sed -i "s/^AP_SSID=.*/AP_SSID=\"$new_ssid\"/" "$CONFIG_FILE"
+            printf "\n${FGYLW}<< AP SSID updated to:${RESET} ${FGGRN}$new_ssid${RESET}\n"
+        else
+            logE "Invalid SSID. Must be 1-32 printable characters with no leading/trailing spaces."
+            return
+        fi
+    else
+        printf "Keeping the current SSID.\n"
+    fi
+
+    cat << EOF
+
+>> ${FGYLW}Current AP Password:${RESET} ${FGGRN}$AP_PASSWORD${RESET}
+
+Enter new password (8-63 printable characters with no leading/trailing spaces, Enter to keep current):
+EOF
+    read -r new_pw < /dev/tty
+
+    # Trim and validate password
+    new_pw=$(printf "%s" "$new_pw" | xargs)
+    if [[ -n "$new_pw" ]]; then
+        if [[ ${#new_pw} -ge 8 && ${#new_pw} -le 63 && "$new_pw" =~ ^[[:print:]]+$ ]]; then
+            AP_PASSWORD="$new_pw"
+            sed -i "s/^AP_PASSWORD=.*/AP_PASSWORD=\"$new_pw\"/" "$CONFIG_FILE"
+            printf "\n${FGYLW}<< AP Password updated to:${RESET} ${FGGRN}$new_pw${RESET}\n"
+        else
+            logE "Invalid password. Must be 8-63 printable characters with no leading/trailing spaces."
+        fi
+    else
+        printf "Keeping the current password.\n"
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Change the system hostname using `nmcli`.
+# @details Prompts the user to enter a new hostname, validates the input, and
+#          updates the system hostname using `nmcli`, `/etc/hostname`, and `/etc/hosts`.
+#          Reloads hostname-related services and updates the current session.
+#
+# @global HOSTNAME The shell's current hostname variable.
+# @global FGYLW    Foreground yellow color code for terminal output.
+# @global FGGRN    Foreground green color code for terminal output.
+# @global RESET    Reset color code for terminal output.
+# @return None
+# -----------------------------------------------------------------------------
+update_hostname() {
+    # clear
+    local current_hostname
+    current_hostname=$(nmcli general hostname)
+
+    cat << EOF
+
+>> ${FGYLW}Current hostname:${RESET} ${FGGRN}$current_hostname${RESET}
+
+Enter a new hostname (Enter to keep current):
+EOF
+
+    read -r new_hostname < /dev/tty || true
+
+    if [ -n "$new_hostname" ] && [ "$new_hostname" != "$current_hostname" ]; then
+        # Validate the new hostname
+        if validate_hostname "$new_hostname"; then
+            printf "\n"
+            exec_command "Update hostname via nmcli" "nmcli general hostname $new_hostname"
+            exec_command "Update /etc/hostname" "printf '%s\n' \"$new_hostname\" | tee /etc/hostname"
+            exec_command "Update /etc/hosts" "sed -i 's/$(hostname)/$new_hostname/g' /etc/hosts"
+            exec_command "Set hostname with hostnamectl" "hostnamectl set-hostname $new_hostname"
+            exec_command "Update shell session's HOSTNAME variable" "export HOSTNAME=$new_hostname"
+            exec_command "Reload hostname-related services" "systemctl restart avahi-daemon"
+
+            printf "\n${FGYLW}<< Hostname updated to:${RESET} ${FGGRN}$new_hostname${RESET}\n"
+        else
+            printf "Invalid hostname. Please follow the hostname rules.\n" >&2
+        fi
+    else
+        printf "Hostname unchanged.\n"
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Updates the password for an existing WiFi network or creates a new profile.
+# @details Configures the selected WiFi network by either updating the password 
+#          of an existing profile or creating a new profile. Validates password 
+#          length and attempts to connect to the network.
+#
+# @param $1 The SSID of the WiFi network to configure.
+#
+# @global FGYLW Terminal formatting for yellow foreground.
+# @global RESET Terminal formatting reset sequence.
+#
+# @return None
+# @throws Logs an error message if connection attempts fail or input is invalid.
+#
+# @example
+# update_wifi_profile "MyNetwork"
+# Output:
+#   Configuring WiFi network: MyNetwork
+#   An existing profile for this SSID was found: MyNetwork
+#   Enter the new password for the network (or press Enter to skip updating):
+#   Password updated. Attempting to connect to MyNetwork.
+#   Successfully connected to MyNetwork.
+# -----------------------------------------------------------------------------
+update_wifi_profile() {
+    local ssid="$1"
+    local password=""
+    local existing_profile=""
+    local connection_status=""
+
+    printf "\nConfiguring WiFi network: %s%s%s\n" "${FGYLW}" "${ssid}" "${RESET}"
+
+    # Check if a profile already exists for this SSID
+    existing_profile=$(nmcli -t -f NAME con show | grep -F "$ssid")
+
+    if [ -n "$existing_profile" ]; then
+        # Existing profile found
+        printf "An existing profile for this SSID was found: %s\n" "$existing_profile"
+        printf "%sEnter the new password for the network (or press Enter to skip updating):%s\n" "${FGYLW}" "${RESET}"
+        read -r password < /dev/tty
+
+        if [ -n "$password" ] && [ "${#password}" -ge 8 ]; then
+            nmcli connection modify "$existing_profile" wifi-sec.psk "$password"
+            printf "Password updated. Attempting to connect to %s.\n" "$existing_profile"
+            connection_status=$(nmcli device wifi connect "$existing_profile" 2>&1)
+            if [ $? -eq 0 ]; then
+                printf "Successfully connected to %s.\n" "$ssid"
+            else
+                printf "Failed to connect to %s. Error: %s\n" "$ssid" "$connection_status"
+                nmcli connection delete "$existing_profile" >/dev/null 2>&1
+                printf "The profile has been deleted. Please try again.\n"
+            fi
+        elif [ -n "$password" ]; then
+            printf "Password must be at least 8 characters. No changes were made.\n"
+        else
+            printf "No password entered. Keeping the existing configuration.\n"
+        fi
+    else
+        # No existing profile found, create a new one
+        printf "No existing profile found for %s.\n" "$ssid"
+        printf "%sEnter the password for the network (minimum 8 characters):%s\n" "${FGYLW}" "${RESET}"
+        read -r password < /dev/tty
+
+        if [ -n "$password" ] && [ "${#password}" -ge 8 ]; then
+            printf "Creating a new profile and attempting to connect to %s.\n" "$ssid"
+            connection_status=$(nmcli device wifi connect "$ssid" password "$password" 2>&1)
+            if [ $? -eq 0 ]; then
+                printf "Successfully connected to %s and profile saved.\n" "$ssid"
+            else
+                printf "Failed to connect to %s. Error: %s\n" "$ssid" "$connection_status"
+                printf "The new profile has not been saved.\n"
+            fi
+        else
+            printf "Password must be at least 8 characters. No profile was created.\n"
+        fi
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Validate a proposed Access Point (AP) configuration.
+# @details Ensures there are no network conflicts, the gateway is not in use, 
+#          and the subnet and gateway are valid.
+#
+# @param $1 The new subnet in CIDR format (e.g., "192.168.0.1/24").
+# @param $2 The new gateway IP address (e.g., "192.168.0.254").
+# @return 0 if valid, 1 if invalid.
+# -----------------------------------------------------------------------------
+validate_ap_configuration() {
+    local new_subnet="$1"
+    local new_gateway="$2"
+
+    # Check for conflicts with existing networks
+    if ! validate_network_conflict "$new_subnet"; then
+        logE "The selected subnet conflicts with an existing network."
+        return 1
+    fi
+
+    # Check if gateway is in use
+    if ping -c 1 "${new_gateway%%/*}" &>/dev/null; then
+        logE "The selected gateway IP $new_gateway is already in use."
+        return 1
+    fi
+
+    # Check subnet validity
+    if ! validate_subnet "$new_subnet" "$new_gateway"; then
+        logE "Invalid subnet or gateway configuration."
+        return 1
+    fi
+
+    logI "AP configuration validated successfully."
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Validate a proposed hostname.
+# @details Checks if the hostname adheres to the following rules:
+#          - Not empty.
+#          - Length between 1 and 63 characters.
+#          - Does not start or end with a hyphen or period.
+#          - Contains only alphanumeric characters and hyphens.
+#
+# @param $1 The hostname to validate.
+# @return 0 if the hostname is valid, 1 otherwise.
+# -----------------------------------------------------------------------------
+validate_hostname() {
+    local hostname="$1"
+
+    # Check if the hostname is empty
+    if [[ -z "$hostname" ]]; then
+        logE "Error: Hostname cannot be empty."
+        return 1
+    fi
+
+    # Check length (1 to 63 characters)
+    if [[ ${#hostname} -lt 1 || ${#hostname} -gt 63 ]]; then
+        logE "Error: Hostname must be between 1 and 63 characters."
+        return 1
+    fi
+
+    # Check if the hostname starts or ends with a hyphen or period
+    if [[ "$hostname" =~ ^[-.] || "$hostname" =~ [-.]$ ]]; then
+        logE "Error: Hostname cannot start or end with a hyphen or period."
+        return 1
+    fi
+
+    # Check for valid characters (alphanumeric and hyphen only)
+    if [[ ! "$hostname" =~ ^[a-zA-Z0-9-]+$ ]]; then
+        logE "Error: Hostname can only contain alphanumeric characters and hyphens."
+        return 1
+    fi
+
+    # If all checks pass, return success
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Validate that a given number is within a specific range.
+# @details Ensures the input is a non-negative integer within the range 0 to the specified maximum value.
+#
+# @param $1 The number to validate.
+# @param $2 The maximum allowed value.
+# @return Outputs "true" if valid, logs a warning and outputs nothing if invalid.
+# -----------------------------------------------------------------------------
+validate_host_number() {
+    local num="$1"
+    local max="$2"  # Maximum allowed value
+
+    if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 0 ] && [ "$num" -le "$max" ]; then
+        echo true
+    else
+        logW "Invalid input. Must be a number between 0 and $max."
+        echo
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Check for conflicts between a new subnet and active networks.
+# @details Compares the new subnet with active subnets on the system and logs 
+#          any conflicts.
+#
+# @param $1 The new AP subnet in CIDR format (e.g., "192.168.0.1/24").
+# @return 0 if no conflicts, 1 if conflicts are detected.
+# -----------------------------------------------------------------------------
+validate_network_conflict() {
+    local new_subnet="$1"  # New AP subnet
+    local active_networks
+
+    # Get a list of active subnets
+    active_networks=$(ip -o -f inet addr show | awk '/scope global/ {split($4,a,"/"); print a[1] "/" $5}')
+
+    # Check for overlap
+    for net in $active_networks; do
+        if [[ "$new_subnet" == "$net" ]]; then
+            logE "Conflict detected with active network: $net"
+            return 1
+        fi
+    done
+
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Validate a subnet and its gateway.
+# @details Checks if the subnet follows the CIDR format and the gateway is a valid IP address.
+#
+# @param $1 The subnet in CIDR format (e.g., "192.168.0.1/24").
+# @param $2 The gateway IP address (e.g., "192.168.0.254").
+# @return 0 if valid, 1 if invalid.
+# -----------------------------------------------------------------------------
+validate_subnet() {
+    local ip="$1"
+    local gw="$2"
+
+    if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/24$ ]] && [[ "$gw" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        return 0  # Valid
+    else
+        logW "Invalid subnet or gateway."
+        return 1  # Invalid
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Execute the AP Pop-Up script to manage WiFi and Access Point switching.
+# @details
+# - Runs the AP Pop-Up script if it is installed and available in the system's PATH.
+# - Logs the operation and handles errors if the script is not found.
+#
+# @global SCRIPT_NAME The name of the AP Pop-Up script.
+# @global APP_PATH    The full path to the AP Pop-Up script.
+# @return None
+# -----------------------------------------------------------------------------
+run_ap_popup() {
+    # clear
+    logI "Running AP Pop-Up."
+
+    # Check if the script is available and execute it
+    if which "$SCRIPT_NAME" &>/dev/null; then
+        exec_command "Calling $SCRIPT_NAME" "$APP_PATH"
+    else
+        warn "$SCRIPT_NAME not available. Install first."
+    fi
+}
+
+#
+# ### AP-Config Menu Functions
+#
+
+# -----------------------------------------------------------------------------
+# @brief Executes the function associated with a menu option.
+# @details Validates the selected option against the `OPTIONS_MAP` array, 
+#          ensuring it is valid and maps to an existing function. Executes 
+#          the corresponding function if validation passes.
+#
+# @param $1 The selected menu option.
+#
+# @global OPTIONS_MAP Associative array mapping menu options to their corresponding functions.
+#
+# @return None
+# @throws Prints an error message if the option is invalid or the function does not exist.
+#
+# @example
+# execute_menu_option 1
+# Output: Executes the function associated with option 1.
+# -----------------------------------------------------------------------------
+execute_menu_option() {
+    local option="$1"
+
+    # Check if an option was passed (i.e., $option is not empty)
+    if [[ -z "$option" ]]; then
+        printf "No option provided.\n"
+        return
+    fi
+
+    # Check if the option exists in the associative array
+    if [[ -z "${OPTIONS_MAP[$option]+_}" ]]; then
+        printf "Invalid option.\n"
+        return
+    fi
+
+    # Execute the corresponding function
+    local function_name="${OPTIONS_MAP[$option]}"
+    
+    # Ensure the function exists and is callable
+    if declare -f "$function_name" > /dev/null; then
+        "$function_name"
+    else
+        printf "Function %s does not exist.\n" "$function_name"
+        return
+    fi
+
+    # Prompt to continue
+    printf "\nPress any key (or wait 5 seconds) to continue.\n"
+    read -n 1 -t 5 -sr < /dev/tty || true
+}
+
+# -----------------------------------------------------------------------------
+# @brief Displays the main menu for configuration and maintenance tasks.
+# @details Dynamically generates the menu options based on the script's running context 
+#          (installed or not installed). Options are stored in the `OPTIONS_MAP` array 
+#          and associated with corresponding functions.
+#
+# @global OPTIONS_MAP Associative array mapping menu options to their corresponding functions.
+# @global SEM_VER The current version of the script.
+#
+# @return None
+#
+# @example
+# display_main_menu
+# Output: Displays the menu options and instructions.
+# -----------------------------------------------------------------------------
+display_main_menu() {
+    # clear
+
+    local menu_number=1
+
+    # Clear the OPTIONS_MAP before rebuilding it
+    OPTIONS_MAP=()
+
+    printf "%s\n" "${FGYLW}${BOLD}AP Pop-Up Installation and Setup, ver: $SEM_VER ${RESET}"
+    printf "\n"
+    printf "%s\n" "AP Pop-Up raises an access point when no configured WiFi networks"
+    printf "%s\n" "are in range."
+    printf "\n"
+
+    if ! is_running_from_installed_path; then
+        printf " %d = Install AP Pop-Up Script\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="install_ap_popup"
+        menu_number=$((menu_number + 1))
+
+        printf " %d = Setup a New WiFi Network or Change Password\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="setup_wifi_network"
+        menu_number=$((menu_number + 1))
+
+        printf " %d = Change Hostname\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="update_hostname"
+        menu_number=$((menu_number + 1))
+
+        printf " %d = Exit\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="exit_controller"
+        menu_number=$((menu_number + 1))
+
+    elif is_running_from_installed_path; then
+        printf " %d = Change the Access Point SSID or Password\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="update_access_point_ssid"
+        menu_number=$((menu_number + 1))
+
+        printf " %d = Setup a New WiFi Network or Change Password\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="setup_wifi_network"
+        menu_number=$((menu_number + 1))
+
+        printf " %d = Change Hostname\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="update_hostname"
+        menu_number=$((menu_number + 1))
+
+        printf " %d = Update access point IP\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="update_access_point_ip"
+        menu_number=$((menu_number + 1))
+
+        printf " %d = Live Switch between Network WiFi and Access Point\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="switch_between_wifi_and_ap"
+        menu_number=$((menu_number + 1))
+
+        printf " %d = Run appop now\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="run_ap_popup"
+        menu_number=$((menu_number + 1))
+
+        printf " %d = Uninstall appop\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="uninstall_ap_popup"
+        menu_number=$((menu_number + 1))
+
+        printf " %d = Exit\n" "$menu_number"
+        OPTIONS_MAP[$menu_number]="exit_controller"
+    fi
+
+    # Add an additional line break after the menu
+    printf "\n"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Displays and handles the main menu for user interaction.
+# @details Continuously displays the main menu and waits for user input to execute 
+#          corresponding options. Includes a timeout mechanism for user inactivity.
+#
+# @global OPTIONS_MAP Associative array mapping menu options to their corresponding functions.
+#
+# @return None
+# @throws Exits the script if the user does not provide input within 30 seconds.
+#
+# @example
+# menu
+# Output: Displays the menu, waits for user input, and executes the selected option.
+# -----------------------------------------------------------------------------
+menu() {
+    while true; do
+        display_main_menu
+        printf "Enter your choice:\n"
+
+        # Read user input with timeout
+        if ! read -n 1 -t 30 -sr user_choice < /dev/tty; then
+            # Handle timeout or error
+            exit_controller "User timeout."
+        fi
+
+        execute_menu_option "$user_choice"
+    done
+}
+
+#
+# ### AP-Config GitHub Functions
+#
+
+# -----------------------------------------------------------------------------
+# @brief Download a single file from the repository.
+# @details Downloads the specified file from the repository to the given destination directory.
+#
+# @param $1 The file path in the repository.
+# @param $2 The destination directory.
+# @return None
+# -----------------------------------------------------------------------------
+download_file() {
+    local file_path="$1"
+    local dest_dir="$2"
+
+    mkdir -p "$dest_dir"
+    curl -s \
+        -o "$dest_dir/$(basename "$file_path")" \
+        "https://raw.githubusercontent.com/$REPO_ORG/$REPO_NAME/$REPO_BRANCH/$file_path"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Download files from specified directories in the repository.
+# @details Fetches and downloads all files from the specified directories in the repository.
+#
+# @global DIRECTORIES  An array of directories to process.
+# @global USER_HOME    The user's home directory.
+# @return None
+# -----------------------------------------------------------------------------
+download_files_from_directories() {
+    local dest_root="$USER_HOME/apppop" # Destination root directory
+    logI "Fetching repository tree."
+    local tree=$(fetch_tree)
+
+    if [[ $(printf "%s" "$tree" | jq '.tree | length') -eq 0 ]]; then
+        die 1 "Failed to fetch repository tree. Check repository details or ensure it is public."
+    fi
+
+    for dir in "${DIRECTORIES[@]}"; do
+        logI "Processing directory: $dir"
+
+        local files
+        files=$(printf "%s" "$tree" | jq -r --arg TARGET_DIR "$dir/" \
+            '.tree[] | select(.type=="blob" and (.path | startswith($TARGET_DIR))) | .path')
+
+        if [[ -z "$files" ]]; then
+            logI "No files found in directory: $dir"
+            continue
+        fi
+
+        local dest_dir="$dest_root/$dir"
+        mkdir -p "$dest_dir"
+
+        printf "%s\n" "$files" | while read -r file; do
+            logI "Downloading: $file"
+            download_file "$file" "$dest_dir"
+        done
+
+        logI "Files from $dir downloaded to: $dest_dir"
+    done
+
+    logI "Files saved in: $dest_root"
+    update_directory_and_files "$dest_root"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Fetch the file tree of the repository from the GitHub API.
+# @details Retrieves a recursive tree view of the specified branch.
+#
+# @global REPO_ORG   The GitHub organization or user owning the repository.
+# @global REPO_NAME  The name of the GitHub repository.
+# @global REPO_BRANCH The branch to fetch the tree from.
+#
+# @return JSON representation of the repository's file tree.
+# -----------------------------------------------------------------------------
+fetch_tree() {
+    local branch_sha
+    branch_sha=$(curl -s \
+        "https://api.github.com/repos/$REPO_ORG/$REPO_NAME/git/ref/heads/$REPO_BRANCH" \
+        | jq -r '.object.sha')
+
+    curl -s \
+        "https://api.github.com/repos/$REPO_ORG/$REPO_NAME/git/trees/$branch_sha?recursive=1"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Update ownership and permissions for a single file.
+# @details Sets appropriate ownership and permissions for the given file.
+#
+# @param $1 The file path.
+# @param $2 The root directory for determining ownership.
+# @return 0 on success, 1 on failure.
+# -----------------------------------------------------------------------------
+update_file() {
+    local file="$1"
+    local home_root="$2"
+
+    if [[ -z "$file" || -z "$home_root" ]]; then
+        logE "Usage: update_file <file> <home_root>"
+        return 1
+    fi
+
+    if [[ ! -d "$home_root" ]]; then
+        logE "Home root '$home_root' is not a valid directory."
+        return 1
+    fi
+
+    if [[ ! -f "$file" ]]; then
+        logE "File '$file' does not exist."
+        return 1
+    fi
+
+    local owner
+    owner=$(stat -c '%U' "$home_root")
+    if [[ -z "$owner" ]]; then
+        logE "Unable to determine the owner of the home root."
+        return 1
+    fi
+
+    logI "Changing ownership of '$file' to '$owner'."
+    chown "$owner":"$owner" "$file" || { logE "Failed to change ownership."; return 1; }
+
+    if [[ "$file" == *.sh ]]; then
+        logI "Setting permissions of '$file' to 700 (executable)."
+        chmod 700 "$file" || { logE "Failed to set permissions to 700."; return 1; }
+    else
+        logI "Setting permissions of '$file' to 600."
+        chmod 600 "$file" || { logE "Failed to set permissions to 600."; return 1; }
+    fi
+
+    logI "Ownership and permissions updated successfully for '$file'."
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Update ownership and permissions for a directory and its files.
+# @details Recursively updates ownership and permissions for a directory.
+#
+# @param $1 The directory path.
+# @global USER_HOME The user's home directory for determining ownership.
+# @return 0 on success, 1 on failure.
+# -----------------------------------------------------------------------------
+update_directory_and_files() {
+    local directory="$1"
+    local home_root="$USER_HOME"
+
+    if [[ -z "$directory" ]]; then
+        logE "Usage: update_directory_and_files <directory>"
+        return 1
+    fi
+
+    if [[ ! -d "$directory" ]]; then
+        logE "Directory '$directory' does not exist."
+        return 1
+    fi
+
+    if [[ -z "$home_root" || ! -d "$home_root" ]]; then
+        logE "USER_HOME environment variable is not set or points to an invalid directory."
+        return 1
+    fi
+
+    local owner
+    owner=$(stat -c '%U' "$home_root")
+    if [[ -z "$owner" ]]; then
+        logE "Unable to determine the owner of the home root."
+        return 1
+    fi
+
+    logI "Changing ownership and permissions of '$directory' tree."
+    find "$directory" -type d -exec chown "$owner":"$owner" {} \; -exec chmod 700 {} \; || {
+        logE "Failed to update ownership or permissions of directories."
+        return 1
+    }
+
+    logI "Setting permissions of non-.sh files to 600 in '$directory'."
+    find "$directory" -type f ! -name "*.sh" -exec chown "$owner":"$owner" {} \; -exec chmod 600 {} \; || {
+        logE "Failed to update permissions of non-.sh files."
+        return 1
+    }
+
+    logI "Setting permissions of .sh files to 700 in '$directory'."
+    find "$directory" -type f -name "*.sh" -exec chown "$owner":"$owner" {} \; -exec chmod 700 {} \; || {
+        logE "Failed to update permissions of .sh files."
+        return 1
+    }
+
+    logI "Ownership and permissions applied to all files and directories in '$directory'."
+    return 0
+}
+
+# TODO: Git clone
+
+#
+# ### AP-Config Install Functions
+#
+
+# -----------------------------------------------------------------------------
+# @brief Install and configure man pages for the script.
+# @details Copies the man page files specified in the `MAN_PAGES` array to their 
+#          respective directories under `/usr/share/man`. Updates the man page 
+#          database after installation.
+#
+# @global MAN_PAGES Array containing the names of the man pages to install.
+#
+# @return None
+# @throws Exits with an error if any command fails during the process.
+#
+# @example
+# install_man_pages
+# Output:
+#   Creating directory: /usr/share/man/man1/
+#   Installing man page apconfig.1
+#   Installing man page appop.1
+#   Updating man page database.
+# -----------------------------------------------------------------------------
+install_man_pages() {
+    # Base directory for man pages
+    return # TODO: DEBUG: Commented to speed things up
+    man_base_dir="/usr/share/man"
+
+    # Loop through the man pages
+    for man_page in "${MAN_PAGES[@]}"; do
+        # Extract the section number from the file name
+        section="${man_page##*.}"
+
+        # Target directory based on the section number
+        target_dir="${man_base_dir}/man${section}"
+
+        # Ensure the target directory exists
+        if [[ ! -d "$target_dir" ]]; then
+            exec_command "Creating directory: $target_dir/" "mkdir -p '$target_dir'"
+        fi
+
+        # Install the man page
+        exec_command "Installing man page $man_page" "sudo cp '$man_page' '$target_dir'"
+    done
+
+    # Update the man page database
+    exec_command "Updating man page database." "mandb"
+
+    logI "Man pages installed successfully."
+}
+
+# -----------------------------------------------------------------------------
+# @brief Create or update the systemd service unit for AP Pop-Up.
+# @details Ensures the systemd service unit file is created or updated in 
+#          the designated systemd directory. Handles unmasking, enabling, 
+#          and reloading the service to reflect any changes.
+#
+# @global SYSTEMD_PATH The path to the systemd directory.
+# @global SERVICE_FILE The name of the systemd service file.
+# @global APP_PATH The path to the application executable.
+# @global LOG_PATH The path for storing log files.
+#
+# @return None
+# @throws Logs an error if systemd commands fail or permissions are insufficient.
+# -----------------------------------------------------------------------------
+create_systemd_service() {
+    local service_file_path="$SYSTEMD_PATH/$SERVICE_FILE"
+
+    # Check if the systemd service already exists
+    if ! systemctl -all list-unit-files "$SERVICE_FILE" | grep -q "$SERVICE_FILE"; then
+        logI "Creating systemd service: $SCRIPT_NAME."
+    else
+        logI "Updating systemd service: $SCRIPT_NAME."
+        exec_command "Disabling $SERVICE_FILE" "systemctl disable $SERVICE_FILE"
+        exec_command "Stopping $SERVICE_FILE" "systemctl stop $SERVICE_FILE"
+        exec_command "Unmasking $SERVICE_FILE" "systemctl unmask $SERVICE_FILE"
+    fi
+
+    # Write the systemd service file
+    cat > "$service_file_path" <<EOF
+[Unit]
+Description=Automatically toggles WiFi Access Point based on network availability ($SCRIPT_NAME)
+After=multi-user.target
+Requires=network-online.target
+
+[Service]
+Type=simple
+ExecStart=${APP_PATH}
+StandardOutput=file:$LOG_PATH/output.log
+StandardError=file:$LOG_PATH/error.log
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    exec_command "Creating log target: $LOG_PATH" "mkdir -p $LOG_PATH"
+    exec_command "Unmasking $SERVICE_FILE" "systemctl unmask $SERVICE_FILE"
+    exec_command "Enabling $SERVICE_FILE" "systemctl enable $SERVICE_FILE"
+    exec_command "Reloading systemd" "systemctl daemon-reload"
+    logI "Systemd service $SERVICE_FILE created."
+}
+
+# -----------------------------------------------------------------------------
+# @brief Create or update the systemd timer unit for AP Pop-Up.
+# @details Ensures the systemd timer unit file is created or updated in the 
+#          designated systemd directory. Handles unmasking, enabling, and 
+#          starting the timer to ensure periodic execution.
+#
+# @global SYSTEMD_PATH The path to the systemd directory.
+# @global TIMER_FILE The name of the systemd timer file.
+# @global SCRIPT_NAME The name of the script managed by the timer.
+#
+# @return None
+# @throws Logs an error if systemd commands fail or permissions are insufficient.
+# -----------------------------------------------------------------------------
+create_systemd_timer() {
+    local timer_file_path="$SYSTEMD_PATH/$TIMER_FILE"
+
+    # Check if the systemd timer already exists
+    if ! systemctl -all list-unit-files "$TIMER_FILE" | grep -q "$TIMER_FILE"; then
+        logI "Creating systemd timer: $SCRIPT_NAME."
+    else
+        logI "Updating systemd timer: $SCRIPT_NAME."
+        exec_command "Disabling $TIMER_FILE" "systemctl disable $TIMER_FILE"
+        exec_command "Stopping $TIMER_FILE" "systemctl stop $TIMER_FILE"
+        exec_command "Unmasking $TIMER_FILE" "systemctl unmask $TIMER_FILE"
+    fi
+
+    # Write the systemd timer file
+    cat > "$timer_file_path" <<EOF
+[Unit]
+Description=Runs $SCRIPT_NAME every 2 minutes to check network status (appop)
+
+[Timer]
+OnBootSec=0min
+OnCalendar=*:0/2
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    exec_command "Unmasking $TIMER_FILE" "systemctl unmask $TIMER_FILE"
+    exec_command "Enabling $TIMER_FILE" "systemctl enable $TIMER_FILE"
+    exec_command "Reloading systemd" "systemctl daemon-reload"
+    exec_command "Starting $TIMER_FILE" "systemctl start $TIMER_FILE"
+    logI "Systemd service $TIMER_FILE started."
+}
+
+# -----------------------------------------------------------------------------
+# @brief Check if the daemon script is installed.
+# @details Verifies if the daemon script exists at the path specified by
+#          the global variable SCRIPT_PATH.
+# @return 0 if the daemon script is installed; 1 otherwise.
+# -----------------------------------------------------------------------------
+is_daemon_installed() {
+    # Check if the file exists in SCRIPT_PATH
+    if [[ -f "$SCRIPT_PATH" ]]; then
+        return 0  # Daemon script is installed (success)
+    else
+        return 1  # Daemon script is not installed (failure)
+    fi
+}
+
+# TODO:
+# -----------------------------------------------------------------------------
+# @brief Check if the script is running from the installed path.
+# @details This function compares the real path of the script with the 
+#          expected controller path (CONTROLLER_PATH) to determine if the script
+#          is being executed from the correct location. It uses `readlink` to 
+#          resolve the real path of the script.
+# @return 0 if running from the installed path; 1 otherwise.
+# -----------------------------------------------------------------------------
+is_running_from_installed_path() {
+    echo "DEBUG: is_running_from_installed_path() called"
+
+    # Declare local variables
+    local script_realpath
+
+    # Resolve the real path of the script
+    script_realpath="$(readlink -f "$0")"
+    echo "DEBUG: script_realpath=${script_realpath}"
+    echo "DEBUG: CONTROLLER_PATH=${CONTROLLER_PATH}"
+
+    # Compare the resolved path with the controller path
+    if [[ "$script_realpath" == "$CONTROLLER_PATH" ]]; then
+        return 0  # Running from the installed path
+    else
+        return 1  # Not running from the installed path
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Install the controller script if not already installed.
+# @details Installs the current script to the specified `CONTROLLER_PATH` if it 
+#          meets the required conditions:
+#          - The script is not running from an already installed path.
+#          - The script is not being re-run (`RE_RUN` is not set to `true`).
+#
+#          After installation, the script replaces itself in memory with the 
+#          newly installed version using `exec_new_shell`.
+#
+# @global RE_RUN            Indicates if the script is being re-run.
+# @global CONTROLLER_PATH   The target path where the controller script should be installed.
+# @global THIS_SCRIPT       The name of the current script.
+#
+# @return None
+#
+# @throws Exits the script if any installation or permission change command fails.
+#
+# @example
+# install_controller_script
+# Output:
+#   Installing this tool as /usr/local/sbin/controller_name.
+# -----------------------------------------------------------------------------
+install_controller_script() {
+    # Call is_running_from_installed_path once and store the result
+    local is_installed
+    if is_running_from_installed_path; then
+        is_installed=true
+    else
+        is_installed=false
+    fi
+
+    # Evaluate the conditions
+    condition1=$([[ "${RE_RUN:-false}" != "true" ]] && echo true || echo false)
+    condition2=$([[ "$is_installed" == "false" ]] && echo true || echo false)
+
+    if [[ "$condition1" == "true" && "$condition2" == "true" ]]; then
+        logI "Installing this tool as $CONTROLLER_PATH."
+
+        # Get the directory of the current script
+        local script_path
+        script_path="$(dirname "$(readlink -f "$0")")"
+
+        exec_command "Installing controller" "cp -f \"$script_path/$THIS_SCRIPT\" \"$CONTROLLER_PATH\""
+        exec_command "Change permissions on controller" "chmod +x \"$CONTROLLER_PATH\""
+    fi
+
+    # Replace the current running script in memory with the installed version
+    exec_new_shell "Re-spawning (1) from $CONTROLLER_PATH" "$CONTROLLER_PATH"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Uninstall the AP Pop-Up script and related systemd services and timers.
+# @details
+# - Stops and disables systemd services and timers associated with AP Pop-Up.
+# - Removes configuration files, log directories, and man pages.
+# - Ensures complete cleanup of the AP Pop-Up installation.
+#
+# @global SERVICE_FILE    Name of the systemd service file.
+# @global TIMER_FILE      Name of the systemd timer file.
+# @global SYSTEMD_PATH    Path to systemd unit files.
+# @global LOG_PATH        Directory for log files.
+# @global CONFIG_FILE     Path to the configuration file.
+# @global APP_PATH        Path to the AP Pop-Up executable script.
+# @global CONTROLLER_PATH Path to the controller script.
+# @global MAN_PAGES       Array of man page file names.
+# @global SCRIPT_NAME     Name of the script being uninstalled.
+# @return None
+# -----------------------------------------------------------------------------
+uninstall_ap_popup() {
+    # clear
+    logI "Uninstalling AP Pop-Up."
+
+    # Remove the systemd service
+    if systemctl -all list-unit-files "$SERVICE_FILE" | grep -q "$SERVICE_FILE"; then
+        logI "Removing systemd service: $SERVICE_FILE"
+        exec_command "Stopping $SERVICE_FILE" "systemctl stop $SERVICE_FILE"
+        exec_command "Disabling $SERVICE_FILE" "systemctl disable $SERVICE_FILE"
+        exec_command "Unmasking $SERVICE_FILE" "systemctl unmask $SERVICE_FILE"
+        exec_command "Removing $SERVICE_FILE" "rm -f $SYSTEMD_PATH/$SERVICE_FILE"
+        exec_command "Reloading systemd" "systemctl daemon-reload"
+        exec_command "Removing log target" "rm -fr $LOG_PATH/"
+    fi
+
+    # Remove the systemd timer
+    if systemctl -all list-unit-files "$TIMER_FILE" | grep -q "$TIMER_FILE"; then
+        logI "Removing systemd timer: $TIMER_FILE"
+        exec_command "Stopping $TIMER_FILE" "systemctl stop $TIMER_FILE"
+        exec_command "Disabling $TIMER_FILE" "systemctl disable $TIMER_FILE"
+        exec_command "Unmasking $TIMER_FILE" "systemctl unmask $TIMER_FILE"
+        exec_command "Removing $TIMER_FILE" "rm -f $SYSTEMD_PATH/$TIMER_FILE"
+        exec_command "Reloading systemd" "systemctl daemon-reload"
+    fi
+
+    # Remove the configuration file
+    if [ -f "$CONFIG_FILE" ]; then
+        exec_command "Removing $SCRIPT_NAME.conf" "rm -f $CONFIG_FILE"
+    fi
+
+    # Remove the AP Pop-Up script
+    if [ -f "$APP_PATH" ]; then
+        logD "Removing the script: $SCRIPT_NAME"
+        rm -f "$APP_PATH"
+    fi
+
+    # Remove the controller script
+    if [ -f "$CONTROLLER_PATH" ]; then
+        logD "Removing the script: $CONTROLLER_PATH"
+        rm -f "$CONTROLLER_PATH"
+    fi
+
+    # Base directory for man pages
+    local man_base_dir="/usr/share/man"
+
+    # Remove associated man pages
+    exit_controller "AP Pop-Up uninstallation complete."
+    return # TODO: DEBUG: Commented to speed things up
+
+    for man_page in "${MAN_PAGES[@]}"; do
+        # Extract the section number from the file name
+        local section="${man_page##*.}"
+
+        # Target directory based on the section number
+        local target_dir="${man_base_dir}/man${section}"
+
+        # Remove the man page if it exists
+        if [ -f "$target_dir/$man_page" ]; then
+            exec_command "Removing man page $man_page." "rm '$target_dir/$man_page'"
+        fi
+        pause # DEBUG: TODO
+    done
+
+    # Update the man page database
+    pause # DEBUG: TODO
+    exec_command "Updating man page database." "mandb"
+    logI "Man pages removed successfully."
+
+    exit_controller "AP Pop-Up uninstallation complete."
+}
+
+# -----------------------------------------------------------------------------
+# @brief Install the AP Pop-Up script and its dependencies.
+# @details Copies the script to `/usr/bin`, ensures required APT packages are 
+#          installed, and configures the necessary systemd services, timers, 
+#          and man pages. If the controller script is not installed, it will 
+#          be set up and the script will relaunch itself.
+#
+# @global SOURCE_APP_NAME The name of the script to install.
+# @global APP_PATH The target installation path for the script.
+#
+# @return None
+# @throws Exits with an error if the source script is not found or if any step 
+#         in the installation process fails.
+#
+# @example
+# install_ap_popup
+# Output:
+#   Installing apconfig.sh.
+#   Installing controller.
+# -----------------------------------------------------------------------------
+install_ap_popup() {
+    local source_dir="${source_dir:-"$(pwd)"}"
+
+    # Verify that the source script exists
+    if [ ! -f "$source_dir/$SOURCE_APP_NAME" ]; then
+        die 1 "Error: $SOURCE_APP_NAME not found in $source_dir. Cannot continue."
+    fi
+
+    # Install the main script to the application path
+    exec_command "Installing $SOURCE_APP_NAME" "cp '$source_dir/$SOURCE_APP_NAME' '$APP_PATH'"
+    chmod +x "$APP_PATH"
+
+    # Check and install APT packages if needed
+    check_apt_packages
+
+    # Ensure the configuration file exists
+    check_config_file
+
+    # Create and enable the required systemd service
+    create_systemd_service
+
+    # Create and enable the required systemd timer
+    create_systemd_timer
+
+    # Install man pages for the application
+    install_man_pages
+
+    # Install the controller script and relaunch
+    install_controller_script
+}
 
 # ############
 # ### Main Functions
@@ -3899,9 +5337,9 @@ parse_args() {
 
 # -----------------------------------------------------------------------------
 # @brief The main entry point for the script.
-# @details This function orchestrates the execution of the script by invoking 
-#          a series of functions to check the environment, validate dependencies, 
-#          and perform the main tasks. Debugging can be enabled by passing the 
+# @details This function orchestrates the execution of the script by invoking
+#          a series of functions to check the environment, validate dependencies,
+#          and perform the main tasks. Debugging can be enabled by passing the
 #          `debug` argument.
 #
 # @param $@ Command-line arguments. If `debug` is included, debug mode is enabled.
@@ -3911,8 +5349,8 @@ parse_args() {
 # @return None
 #
 # @example
-# ./script.sh              # Run the script normally.
-# ./script.sh debug        # Run the script in debug mode.
+# ./apconfig.sh              # Run the script normally.
+# ./apconfig.sh debug        # Run the script in debug mode.
 # -----------------------------------------------------------------------------
 main() {
     # Debug setup
@@ -3956,6 +5394,44 @@ main() {
     start_script "$debug"              # Start the script with instructions
     set_time "$debug"                  # Offer to change timezone if default
     handle_apt_packages "$debug"       # Perform APT maintenance and install/update packages
+
+    #
+    # ### AP-Config Functions:
+    #
+
+    check_network_manager   # Check if NetworkManager (nmcli) is running and active.
+    check_hostapd_status    # Check hostapd status to ensure it does not conflict with nmcli
+
+    # @global IS_LOCAL Indicates whether local mode is enabled.
+    # @global IS_GITHUB_REPO Indicates whether the script resides in a GitHub repository.
+    # @global THIS_SCRIPT The name of the script being executed.
+
+    # If we are piped, make sure we are not re-running the script in a new shell
+    if is_this_piped && is_this_curled; then
+        # Curl installer to local temp_dir
+        download_files_from_directories
+
+        # Resolve the real path of the script
+        # TODO: local dest_root="$USER_HOME/$REPO_NAME"       # Replace with your desired destination root directory
+        readonly USER_HOME=$(eval printf "~%s" "$(printf "%s" "$SUDO_USER")")
+        local dest_root="$USER_HOME/apppop"       # Replace with your desired destination root directory
+        local new_script_path=$(readlink -f "$dest_root/src/$THIS_SCRIPT")
+        
+        # Replace the current running script with downloaded script
+        exec_new_shell "Re-spawning from $new_script_path" "$new_script_path"
+    elif is_this_piped; then
+        install_ap_popup
+    fi
+
+    # Load config
+    check_config_file
+
+    menu
+
+    #
+    # ### AP-Config Functions^
+    #
+
     finish_script "$debug"             # Finish the script with final instructions
 
     # Debug log: function exit
@@ -3964,7 +5440,7 @@ main() {
 
 # -----------------------------------------------------------------------------
 # @brief Entry point for the script execution.
-# @details Calls the `main` function with all passed command-line arguments. 
+# @details Calls the `main` function with all passed command-line arguments.
 #          Upon completion, exits with the status returned by `main`.
 #
 # @param $@ All command-line arguments passed to the script.
@@ -3972,7 +5448,7 @@ main() {
 # @return The exit status code of the `main` function.
 #
 # @example
-# ./template.sh debug
+# ./apconfig.sh debug
 # -----------------------------------------------------------------------------
 main "$@"
 exit $?
