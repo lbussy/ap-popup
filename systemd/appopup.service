@@ -1,0 +1,13 @@
+[Unit]
+Description=Automatically toggles WiFi Access Point based on network availability (%APP_NAME%)
+After=multi-user.target
+Requires=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%APP_PATH%
+StandardOutput=file:%APP_LOG_PATH%/output.log
+StandardError=file:%APP_LOG_PATH%/error.log
+
+[Install]
+WantedBy=multi-user.target
