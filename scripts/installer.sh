@@ -152,6 +152,16 @@ declare GIT_API="${GIT_API:-"https://api.github.com/repos/$REPO_ORG/$REPO_NAME"}
 readonly GIT_DIRS=("man" "scripts" "conf" "systemd")
 
 # -----------------------------------------------------------------------------
+# @var MAN_BASE_DIR
+# @brief Base directory for man pages.
+# @details This variable defines the root directory where man pages will be 
+#          installed or removed. By default, it is set to `/usr/share/man`.
+#          It can be overridden by setting the `MAN_BASE_DIR` environment 
+#          variable before running the script.
+# -----------------------------------------------------------------------------
+readonly MAN_BASE_DIR="${MAN_BASE_DIR:-/usr/share/man}"
+
+# -----------------------------------------------------------------------------
 # @var CONTROLLER_NAME
 # @brief The final installed name of the main controller script (without
 #        extension).
@@ -3497,11 +3507,11 @@ handle_apt_packages() {
 # @details This function installs the controller script by copying it from
 #          the source directory to the specified path when "install" is
 #          passed as an argument. It also ensures the script has the correct
-#          ownership (root:root) and executable permissions. If "remove" is
+#          ownership (root:root) and executable permissions. If "uninstall" is
 #          passed, the function will remove the controller script and reset
 #          the permissions and ownership.
 #
-# @param $1 Action to perform: "install" to install the controller, "remove"
+# @param $1 Action to perform: "install" to install the controller, "uninstall"
 #           to uninstall the controller.
 # @param $2 Optional debug flag to print debug information.
 #
@@ -3514,7 +3524,7 @@ handle_apt_packages() {
 #
 # @example
 # install_controller_script "install"
-# install_controller_script "remove"
+# install_controller_script "uninstall"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2329
 install_controller_script() {
@@ -3567,7 +3577,7 @@ install_controller_script() {
             }
         fi
 
-    elif [[ "$action" == "remove" ]]; then
+    elif [[ "$action" == "uninstall" ]]; then
         logI "Removing '$CONTROLLER_NAME'."
 
         # Remove the controller script
@@ -3582,7 +3592,7 @@ install_controller_script() {
             }
         fi
     else
-        die 1 "Invalid action. Use 'install' or 'remove'."
+        die 1 "Invalid action. Use 'install' or 'uninstall'."
     fi
 
     debug_end "$debug"
@@ -3593,11 +3603,11 @@ install_controller_script() {
 # @details This function installs the application script by copying it from
 #          the source directory to the specified target path when "install" is
 #          passed as an argument. It also ensures the script has the correct
-#          ownership (root:root) and executable permissions. If "remove" is
+#          ownership (root:root) and executable permissions. If "uninstall" is
 #          passed, the function will remove the application script and reset
 #          the permissions and ownership.
 #
-# @param $1 Action to perform: "install" to install the application, "remove"
+# @param $1 Action to perform: "install" to install the application, "uninstall"
 #           to uninstall the application.
 # @param $2 Optional debug flag to print debug information.
 #
@@ -3610,7 +3620,7 @@ install_controller_script() {
 #
 # @example
 # install_application_script "install"
-# install_application_script "remove"
+# install_application_script "uninstall"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2329
 install_application_script() {
@@ -3663,7 +3673,7 @@ install_application_script() {
             }
         fi
 
-    elif [[ "$action" == "remove" ]]; then
+    elif [[ "$action" == "uninstall" ]]; then
         logI "Removing '$CONTROLLER_NAME'."
 
         # Remove the application script
@@ -3678,7 +3688,7 @@ install_application_script() {
             }
         fi
     else
-        die 1 "Invalid action. Use 'install' or 'remove'."
+        die 1 "Invalid action. Use 'install' or 'uninstall'."
     fi
 
     debug_end "$debug"
@@ -3689,11 +3699,11 @@ install_application_script() {
 # @details This function installs the configuration file for the application
 #          by copying it from the source directory to the target configuration
 #          path when "install" is passed as an argument. It also ensures the
-#          configuration file has the correct ownership (root:root). If "remove"
+#          configuration file has the correct ownership (root:root). If "uninstall"
 #          is passed, the function will remove the configuration file and reset
 #          the permissions and ownership.
 #
-# @param $1 Action to perform: "install" to install the configuration, "remove"
+# @param $1 Action to perform: "install" to install the configuration, "uninstall"
 #           to uninstall the configuration.
 # @param $2 Optional debug flag to print debug information.
 #
@@ -3706,7 +3716,7 @@ install_application_script() {
 #
 # @example
 # install_config_file "install"
-# install_config_file "remove"
+# install_config_file "uninstall"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2329
 install_config_file() {
@@ -3759,7 +3769,7 @@ install_config_file() {
             }
         fi
 
-    elif [[ "$action" == "remove" ]]; then
+    elif [[ "$action" == "uninstall" ]]; then
         logI "Removing '$APP_NAME' configuration."
 
         # Remove the configuration file
@@ -3774,7 +3784,7 @@ install_config_file() {
             }
         fi
     else
-        die 1 "Invalid action. Use 'install' or 'remove'."
+        die 1 "Invalid action. Use 'install' or 'uninstall'."
     fi
 
     debug_end "$debug"
@@ -4199,9 +4209,9 @@ get_man_file_array() {
     local dir="man"
     local files
 
-    # Extract file paths under the "man/" directory
+    # Extract basenames of file paths under the "man/" directory
     files=$(printf "%s" "$tree" | jq -r --arg TARGET_DIR "$dir/" \
-        '.tree[] | select(.type=="blob" and (.path | startswith($TARGET_DIR))) | .path')
+        '.tree[] | select(.type=="blob" and (.path | startswith($TARGET_DIR))) | .path' | xargs -n 1 basename)
 
     if [[ -z "$files" ]]; then
         logE "No files found in the 'man/' directory."
@@ -4209,10 +4219,6 @@ get_man_file_array() {
         die 1 "No man page files available."
     fi
 
-    # Print the list of files to stderr
-    # TODO
-    printf "%s\n" "$files" >&2
-    debug_print "Man page files retrieved: $files"
     debug_end "$debug"
 }
 
@@ -4240,58 +4246,65 @@ get_man_file_array() {
 # shellcheck disable=SC2329
 install_man_pages() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    
     # Extract action and remaining arguments
     local parse_result=""; parse_result=$(parse_action_and_args "$@")
     local action=""; action="${parse_result%%|*}"   # $action = before the '|'
     local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
 
-    # Base directory for man pages
-    local man_base_dir="/usr/share/man"
+    local man_base_dir="/usr/share/man"  # Adjust as necessary for your system
+    local -a man_files
+    IFS=$'\n' read -r -d '' -a man_files < <(get_man_file_array "$debug" && printf '\0')
 
     if [[ "$action" == "install" ]]; then
         logI "Installing man pages."
 
-        # Ensure the target directory exists
-        [[ ! -d "$man_base_dir" ]] || {
-            logE "Target directory does not exist."
-            debug_end "$debug"
-            return 1
-        }
+        for man_file in "${man_files[@]}"; do
+            [[ -n "$man_file" ]] || continue  # Skip empty entries
 
-        # Loop through all man pages in the local directory
-        for man_page in "$LOCAL_REPO_DIR/man/"*.*; do
-            [[ -e "$man_page" ]] || continue  # Skip if no files are found
-
-            local section="${man_page##*.}"
+            # Extract section and filename
+            local section="${man_file##*.}"
+            local filename="${man_file}"
             local target_dir="${man_base_dir}/man${section}"
+            local source_file="$USER_HOME/$REPO_NAME/man/$filename"
+            local compressed_file="${source_file}.gz"
 
-            # Ensure the target directory for the section exists
+            # Verify the source file exists
+            if [[ ! -f "$source_file" ]]; then
+                logE "Manual page $filename not found in $source_file"
+                continue
+            fi
+
+            # Create target directory if it doesn't exist
             if [[ ! -d "$target_dir" ]]; then
-                debug_print  "Exec: sudo mkdir -p $target_dir" "$debug"
-                exec_command "Create man section target direstory" "sudo mkdir -p $target_dir" "$debug" || {
-                    logE "Failed to create target directory."
-                    debug_end "$debug"
-                    return 1
+                debug_print "Creating directory $target_dir" "$debug"
+                exec_command "Create man directory" "sudo mkdir -p $target_dir" "$debug" || {
+                    logE "Failed to create $target_dir"
+                    continue
                 }
             fi
-            # Compress and install the man page
-            exec_command "Compress man page" "gzip -f $man_page" "$debug" || {
-                logE "Failed to install controller."
-                debug_end "$debug"
-                return 1
-            }
 
-            local man_page_gz="${man_page}.gz"
-            exec_command "Install man page" "sudo cp $man_page_gz $target_dir" "$debug" || {
-                logE "Failed to install man page."
-                debug_end "$debug"
-                return 1
+            # Compress the file if not already compressed
+            if [[ ! -f "$compressed_file" ]]; then
+                debug_print "Compressing $source_file" "$debug"
+                exec_command "Compress manual page" "gzip -f $source_file" "$debug" || {
+                    logE "Failed to compress $source_file"
+                    continue
+                }
+            fi
+
+            # Copy compressed file to the target directory
+            debug_print "Copying $compressed_file to $target_dir" "$debug"
+            exec_command "Copy manual page" "sudo cp $compressed_file $target_dir" "$debug" || {
+                logE "Failed to copy $compressed_file to $target_dir"
+                continue
             }
         done
 
         # Update the man page database
+        debug_print "Running sudo mandb to update manual page database" "$debug"
         exec_command "Update man page database" "sudo mandb" "$debug" || {
-            logE "Failed to update mandb."
+            logE "Failed to update manual page database."
             debug_end "$debug"
             return 1
         }
@@ -4299,43 +4312,42 @@ install_man_pages() {
         logI "Man pages installed successfully."
 
     elif [[ "$action" == "uninstall" ]]; then
-        logI "Removing man pages."
+        logI "Uninstalling man pages."
+        for man_file in "${man_files[@]}"; do
+            [[ -n "$man_file" ]] || continue  # Skip empty entries
 
-        # Fetch and iterate over the man pages in the repository
-        local files
-        files=$(get_man_file_array "$debug")
+            # Extract section and filename
+            local section="${man_file##*.}"
+            local filename="${man_file}"
+            local target_dir="${man_base_dir}/man${section}"
 
-        while IFS= read -r file; do
-            [[ -n "$file" ]] || continue  # Skip empty lines
+            # Remove the manual pages
+            for ext in "" ".gz" ".gz.gz"; do
+                local target_file="$target_dir/${filename}${ext}"
+                if [[ -f "$target_file" ]]; then
+                    debug_print "Removing $target_file" "$debug"
+                    exec_command "Remove manual page" "sudo rm -f $target_file" "$debug" || {
+                        logE "Failed to remove $target_file"
+                    }
+                fi
+            done
+        done
 
-            local man_page section target_dir
-            man_page=$(basename "$file")
-            section="${man_page##*.}"
-            target_dir="${man_base_dir}/man${section}"
-
-            # Attempt to remove the man page and its compressed version
-            exec_command "Remove man page" "sudo rm -f ${target_dir}/${man_page} ${target_dir}/${man_page}.gz" "$debug" || {
-                logE "Failed to remove man page."
-                debug_end "$debug"
-                return 1
-            }
-        done <<< "$files"
-
-        # Optionally, clean up empty directories
-        exec_command "Clean up empty directories" "sudo find $man_base_dir/man* -type d -empty -delete" "$debug" || {
-            logE "Failed to cleanup empty directories."
-            debug_end "$debug"
-            return 1
+        # Clean up empty directories
+        debug_print "Cleaning up empty directories in $man_base_dir" "$debug"
+        exec_command "Remove empty directories" "sudo find $man_base_dir -type d -empty -delete" "$debug" || {
+            logW "Failed to remove empty directories in $man_base_dir."
         }
+
         # Update the man page database
-        exec_command "Update mandb" "sudo mandb" "$debug" || {
-            logE "Failed to update mandb."
+        debug_print "Running sudo mandb to update manual page database" "$debug"
+        exec_command "Update man page database" "sudo mandb" "$debug" || {
+            logE "Failed to update manual page database."
             debug_end "$debug"
             return 1
         }
 
-        logI "Man pages uninstalled successfully."
-
+        logI "All man pages uninstalled successfully."
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
     fi
@@ -4478,17 +4490,23 @@ install_ap_popup() {
 
     # Define the group of functions to install/uninstall
     local install_group=(
-        "check_network_manager"
-        "check_hostapd_status"
-        "handle_apt_packages"
-        "download_files_in_directories"
-        "install_controller_script"
-        "install_application_script"
-        "install_config_file"
-        "create_systemd_service"
-        "create_systemd_timer"
+        # "check_network_manager"
+        # "check_hostapd_status"
+        # "handle_apt_packages"
+        # "download_files_in_directories"
+        # "install_controller_script"
+        # "install_application_script"
+        # "install_config_file"
+        # "create_systemd_service"
+        # "create_systemd_timer"
         "install_man_pages"
     )
+
+    # TODO:
+    # - Validate man pages
+    # - Review/fix systemd service files
+    # - Handle install/uninstall
+    # - Cleanup files in directories
 
     # Validate the action argument
     if [[ "$action" != "install" && "$action" != "uninstall" ]]; then
@@ -4587,7 +4605,15 @@ parse_action_and_args() {
 ############
 
 _main() {
+    # Get debug flag
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    # Extract/remove action and reset remaining arguments
+    local parse_result=""; parse_result=$(parse_action_and_args "$@")
+    # Extract the action part from parse_result and default to "install" if empty
+    local action="${parse_result%%|*}"  # Extract action from parse_result
+    action="${action:-install}"        # Default to "install" if action is empty
+    # Extract the remaining arguments
+    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = remaining arguments
 
     # Check and set up the environment
     enforce_sudo "$debug"              # Ensure proper privileges for script execution
@@ -4605,14 +4631,7 @@ _main() {
     print_version "$debug"             # Log the script version
 
     # Run installer steps
-    #install_ap_popup "install" "debug" # TODO DEBUG
-    # Create log directory if not exist and ensure correct permissions
-    debug_print "Exec: (log path) sudo mkdir -p $APP_LOG_PATH" "$debug"
-    exec_command "Create log path" "sudo mkdir -p $APP_LOG_PATH" "$debug" || {
-        logE "Failed to create log path."
-        debug_end "$debug"
-        return 1
-    }
+    install_ap_popup "$action" "$debug" # TODO DEBUG
 
     debug_end "$debug"
     return 0
