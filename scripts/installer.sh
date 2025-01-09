@@ -13,14 +13,16 @@ set +o noclobber
 # @details This variable determines if the script requires execution with root
 #          privileges. It defaults to `true`, meaning the script will enforce
 #          that it is run with `sudo` or as a root user. This behavior can be
-#          overridden by setting the `REQUIRE_SUDO` environment variable to `false`.
+#          overridden by setting the `REQUIRE_SUDO` environment variable to
+#          `false`.
 #
 # @default true
 #
 # @example
-# REQUIRE_SUDO=false ./template.sh  # Run the script without enforcing root privileges.
+# REQUIRE_SUDO=false ./template.sh  # Run the script without enforcing root
+#                                     privileges.
 # -----------------------------------------------------------------------------
-readonly REQUIRE_SUDO="${REQUIRE_SUDO:-true}"  # Default to "true" if not specified.
+readonly REQUIRE_SUDO="${REQUIRE_SUDO:-true}"
 
 # -----------------------------------------------------------------------------
 # @brief Determines the script name to use.
@@ -71,34 +73,36 @@ fi
 # @example
 # DRY_RUN=true ./template.sh  # Run the script in dry-run mode.
 # -----------------------------------------------------------------------------
-declare DRY_RUN="${DRY_RUN:-false}"  # Use existing value, or default to "false".
+declare DRY_RUN="${DRY_RUN:-false}"
 
 # -----------------------------------------------------------------------------
 # @var IS_REPO
-# @brief Indicates whether the script resides in a GitHub repository or subdirectory.
-# @details This variable is initialized to `false` by default. During execution, it
-#          is dynamically set to `true` if the script is detected to be within a
-#          GitHub repository (i.e., if a `.git` directory exists in the directory
-#          hierarchy of the script's location).
+# @brief Indicates whether the script resides in a GitHub repository or
+#        subdirectory.
+# @details This variable is initialized to `false` by default. During
+#          execution, it is dynamically set to `true` if the script is detected
+#          to be within a GitHub repository (i.e., if a `.git` directory exists
+#          in the directory hierarchy of the script's location).
 #
 # @example
 # if [[ "$IS_REPO" == "true" ]]; then
-#     echo "This script resides within a GitHub repository."
+#     printf "This script resides within a GitHub repository.\n"
 # else
-#     echo "This script is not located within a GitHub repository."
+#     printf "This script is not located within a GitHub repository.\n"
 # fi
 # -----------------------------------------------------------------------------
 declare IS_REPO="${IS_REPO:-false}"  # Default to "false".
 
 # -----------------------------------------------------------------------------
 # @brief Project metadata constants used throughout the script.
-# @details These variables provide metadata about the script, including ownership,
-#          versioning, project details, and GitHub URLs. They are initialized with
-#          default values or dynamically set during execution to reflect the project's
-#          context.
+# @details These variables provide metadata about the script, including
+#          ownership, versioning, project details, and GitHub URLs. They are
+#          initialized with default values or dynamically set during execution
+#          to reflect the project's context.
 #
 # @vars
-# - @var REPO_ORG The organization or owner of the repository (default: "lbussy").
+# - @var REPO_ORG The organization or owner of the repository (default:
+#                 "lbussy").
 # - @var REPO_NAME The name of the repository (default: "bash-template").
 # - @var REPO_BRANCH The current Git branch name (default: "main").
 # - @var GIT_TAG The current Git tag (default: "0.0.1").
@@ -107,24 +111,27 @@ declare IS_REPO="${IS_REPO:-false}"  # Default to "false".
 # - @var LOCAL_WWW_DIR The local web directory path (default: unset).
 # - @var LOCAL_SCRIPTS_DIR The local scripts directory path (default: unset).
 # - @var GIT_RAW The base URL for accessing raw GitHub content
-#                (default: "https://raw.githubusercontent.com/$REPO_ORG/$REPO_NAME").
+#                (default: "https://raw.githubusercontent.com/$REPO_ORG/
+#                $REPO_NAME").
 # - @var GIT_API The base URL for the GitHub API for this repository
-#                (default: "https://api.github.com/repos/$REPO_ORG/$REPO_NAME").
+#                (default: "https://api.github.com/repos/$REPO_ORG/$REPO_NAME")
 # - @var GIT_CLONE The clone URL for the GitHub repository
-#                (default: "https://api.github.com/repos/$REPO_ORG/$REPO_NAME").
+#                  (default: "https://api.github.com/repos/$REPO_ORG/
+#                  $REPO_NAME").
 #
 # @example
-# echo "Repository: $REPO_ORG/$REPO_NAME"
-# echo "Branch: $REPO_BRANCH, Tag: $GIT_TAG, Version: $SEM_VER"
-# echo "Source Directory: ${LOCAL_REPO_DIR:-Not Set}"
-# echo "WWW Directory: ${LOCAL_WWW_DIR:-Not Set}"
-# echo "Scripts Directory: ${LOCAL_SCRIPTS_DIR:-Not Set}"
-# echo "Raw URL: $GIT_RAW"
-# echo "API URL: $GIT_API"
+# printf "Repository: %s/%s\n" "$REPO_ORG" "$REPO_NAME"
+# printf "Branch: %s, Tag: %s, Version: %s\n" "$REPO_BRANCH" "$GIT_TAG" "$SEM_VER"
+# printf "Source Directory: %s\n" "${LOCAL_REPO_DIR:-Not Set}"
+# printf "WWW Directory: %s\n" "${LOCAL_WWW_DIR:-Not Set}"
+# printf "Scripts Directory: %s\n" "${LOCAL_SCRIPTS_DIR:-Not Set}"
+# printf "Raw URL: %s\n" "$GIT_RAW"
+# printf "API URL: %s\n" "$GIT_API"
 # -----------------------------------------------------------------------------
 declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="${REPO_NAME:-ap-popup}"
-declare REPO_BRANCH="${REPO_BRANCH:-main}"
+declare REPO_DISPLAY_NAME="${REPO_DISPLAY_NAME:-AP Pop-Up}"
+declare REPO_BRANCH="${REPO_BRANCH:-installer}"
 declare GIT_TAG="${GIT_TAG:-1.0.0}"
 declare SEM_VER="${GIT_TAG:-1.0.0-main}"
 declare LOCAL_REPO_DIR="${LOCAL_REPO_DIR:-}"
@@ -142,11 +149,12 @@ declare GIT_API="${GIT_API:-"https://api.github.com/repos/$REPO_ORG/$REPO_NAME"}
 #          - `src`: Contains source files for the application.
 #          - `conf`: Contains configuration files for the application.
 # -----------------------------------------------------------------------------
-readonly GIT_DIRS=("man" "scripts" "conf")
+readonly GIT_DIRS=("man" "scripts" "conf" "systemd")
 
 # -----------------------------------------------------------------------------
 # @var CONTROLLER_NAME
-# @brief The final installed name of the main controller script (without extension).
+# @brief The final installed name of the main controller script (without
+#        extension).
 #
 # @var CONTROLLER_PATH
 # @brief The path where the controller script will be installed.
@@ -158,24 +166,28 @@ readonly CONTROLLER_NAME="${CONTROLLER_SOURCE%%.*}"
 readonly CONTROLLER_PATH="/usr/local/sbin/$CONTROLLER_NAME"
 
 # -----------------------------------------------------------------------------
-# @brief        Configuration and installation details for the bash-based daemon.
-# @details      This script sets variables and paths required for installing
-#               and configuring the `appop` daemon and its supporting files.
+# @brief Configuration and installation details for the bash-based daemon.
+# @details This script sets variables and paths required for installing and
+#          configuring the `appop` daemon and its supporting files.
 #
-#               Variables:
-#               - APP_SOURCE: Name of the source script that will be installed as `appop`.
-#               - AP_NAME: The final installed name of the main script (no extension).
-#               - APP_PATH: Path to where the main script (appop) will be installed.
-#               - SYSTEMD_PATH: Path to the systemd directory for services/timers.
-#               - SERVICE_FILE: Name of the systemd service file to be created/managed.
-#               - TIMER_FILE: Name of the systemd timer file to be created/managed.
-#               - CONFIG_FILE: Path to the AP Pop-Up configuration file.
-#               - LOG_PATH: Path to the directory where logs for the application will be stored.
+#          Variables:
+#          - APP_SOURCE: Name of the source script that will be installed
+#            as `appop`.
+#          - AP_NAME: The final installed name of the main script (no
+#            extension).
+#          - APP_PATH: Path to where the main script (appop) will be installed.
+#          - SYSTEMD_PATH: Path to the systemd directory for services/timers.
+#          - SERVICE_FILE: Name of the systemd service file to be
+#            created/managed.
+#          - TIMER_FILE: Name of the systemd timer file to be created/managed.
+#          - CONFIG_FILE: Path to the AP Pop-Up configuration file.
+#          - LOG_PATH: Path to the directory where logs for the application
+#            will be stored.
 # -----------------------------------------------------------------------------
 readonly APP_SOURCE="appop.sh"
 readonly APP_NAME="${APP_SOURCE%%.*}"
 readonly APP_PATH="/usr/bin/$APP_NAME"
-readonly SYSTEMD_PATH="/etc/systemd/system/"
+readonly SYSTEMD_PATH="/etc/systemd/system"
 readonly SERVICE_FILE="$SYSTEMD_PATH/$APP_NAME.service"
 readonly TIMER_FILE="$SYSTEMD_PATH/$APP_NAME.timer"
 readonly CONFIG_FILE="/etc/$APP_NAME.conf"
@@ -185,20 +197,21 @@ readonly APP_LOG_PATH="/var/log/$APP_NAME"
 # @brief Determines and assigns the home directory and real user based on sudo
 #        privileges and environment variables.
 #
-# @details This section of the script checks whether the `REQUIRE_SUDO` flag
-#          is set to true and whether the `SUDO_USER` environment variable is
+# @details This section of the script checks whether the `REQUIRE_SUDO` flag is
+#          set to true and whether the `SUDO_USER` environment variable is
 #          available. It sets the `USER_HOME` variable based on the following
 #          logic:
 #          - If `REQUIRE_SUDO` is true and `SUDO_USER` is not set, `USER_HOME`
 #            is set to empty values.
-#          - If `SUDO_USER` is set, `USER_HOME` is set to the home directory of the
-#            sudo user.
-#          - If `SUDO_USER` is not set, it falls back to using the current user's
-#            home directory (`HOME`).
+#          - If `SUDO_USER` is set, `USER_HOME` is set to the home directory of
+#            the sudo user.
+#          - If `SUDO_USER` is not set, it falls back to using the current
+#            user's home directory (`HOME`).
 #
 # @variables
-# @var USER_HOME The home directory of the user. It is set to the value of `$HOME`
-#                or the sudo user's home directory, depending on the logic.
+# @var USER_HOME The home directory of the user. It is set to the value of
+#                `$HOME` or the sudo user's home directory, depending on the
+#                logic.
 #
 # @example
 # This block is typically used in scripts requiring differentiation between the
@@ -210,7 +223,7 @@ if [[ "$REQUIRE_SUDO" == true && -z "${SUDO_USER-}" ]]; then
     USER_HOME=""
 elif [[ -n "${SUDO_USER-}" ]]; then
     # Use SUDO_USER's values if it's set
-    USER_HOME=$(eval echo "~$SUDO_USER")
+    USER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
 else
     # Fallback to HOME and whoami if SUDO_USER is not set
     USER_HOME="$HOME"
@@ -233,10 +246,10 @@ declare USE_CONSOLE="${USE_CONSOLE:-true}"
 # -----------------------------------------------------------------------------
 # @var TERSE
 # @brief Enables or disables terse logging mode.
-# @details When `TERSE` is set to `true`, log messages are minimal and optimized
-#          for automated environments where concise output is preferred. When
-#          set to `false`, log messages are verbose, providing detailed
-#          information suitable for debugging or manual intervention.
+# @details When `TERSE` is set to `true`, log messages are minimal and
+#          optimized for automated environments where concise output is
+#          preferred. When set to `false`, log messages are verbose, providing
+#          detailed information suitable for debugging or manual intervention.
 #
 # @example
 # TERSE=true  # Enables terse logging mode.
@@ -252,7 +265,8 @@ declare TERSE="${TERSE:-false}"
 # @brief Specifies the minimum supported Bash version.
 # @details Defines the minimum Bash version required to execute the script. By
 #          default, it is set to `4.0`. This value can be overridden by setting
-#          the `MIN_BASH_VERSION` environment variable before running the script.
+#          the `MIN_BASH_VERSION` environment variable before running the
+#          script.
 #          To disable version checks entirely, set this variable to `"none"`.
 #
 # @default "4.0"
@@ -274,7 +288,7 @@ readonly MIN_BASH_VERSION="4.0"
 #
 # @example
 # if [[ "$CURRENT_OS_VERSION" -lt "$MIN_OS" ]]; then
-#     echo "This script requires OS version $MIN_OS or higher."
+#     printf "This script requires OS version %d or higher.\n" "$MIN_OS"
 #     exit 1
 # fi
 # -----------------------------------------------------------------------------
@@ -283,16 +297,16 @@ readonly MIN_OS="11"
 # -----------------------------------------------------------------------------
 # @var MAX_OS
 # @brief Specifies the maximum supported OS version.
-# @details Defines the highest OS version that the script supports. If the script
-#          is executed on a system with an OS version higher than this value,
-#          it may not function as intended. Set this to `-1` to indicate no upper
-#          limit on supported OS versions.
+# @details Defines the highest OS version that the script supports. If the
+#          script is executed on a system with an OS version higher than this
+#          value, it may not function as intended. Set this to `-1` to indicate
+#          no upper limit on supported OS versions.
 #
 # @default 15
 #
 # @example
 # if [[ "$CURRENT_OS_VERSION" -gt "$MAX_OS" && "$MAX_OS" -ne -1 ]]; then
-#     echo "This script supports OS versions up to $MAX_OS."
+#     printf "This script supports OS versions up to %d.\n" "$MAX_OS"
 #     exit 1
 # fi
 # -----------------------------------------------------------------------------
@@ -360,25 +374,26 @@ declare LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
 # @brief List of required external commands for the script.
 # @details This array defines the external commands that the script depends on
 #          to function correctly. Each command in this list is checked for
-#          availability at runtime. If a required command is missing, the script
-#          may fail or display an error message.
+#          availability at runtime. If a required command is missing, the
+#          script may fail or display an error message.
 #
 #          Best practices:
 #          - Ensure all required commands are included.
-#          - Use a dependency-checking function to verify their presence early in the script.
+#          - Use a dependency-checking function to verify their presence early
+#            in the script.
 #
-# @default
-# A predefined set of common system utilities:
+# @default A predefined set of common system utilities:
 # - `"awk"`, `"grep"`, `"tput"`, `"cut"`, `"tr"`, `"getconf"`, `"cat"`, `"sed"`,
 #   `"basename"`, `"getent"`, `"date"`, `"printf"`, `"whoami"`, `"touch"`,
 #   `"dpkg"`, `"dpkg-reconfigure"`, `"curl"`, `"wget"`, `"realpath"`.
 #
-# @note Update this list as needed to reflect the actual commands used in the script.
+# @note Update this list as needed to reflect the actual commands used in the
+#       script.
 #
 # @example
 # for cmd in "${DEPENDENCIES[@]}"; do
 #     if ! command -v "$cmd" &>/dev/null; then
-#         echo "Error: Missing required command: $cmd"
+#         printf "Error: Missing required command: $cmd"
 #         exit 1
 #     fi
 # done
@@ -420,14 +435,14 @@ readonly DEPENDENCIES
 # @example
 # for var in "${ENV_VARS_BASE[@]}"; do
 #     if [[ -z "${!var}" ]]; then
-#         echo "Error: Required environment variable '$var' is not set."
+#         printf "Error: Required environment variable '%s' is not set.\n" "$var"
 #         exit 1
 #     fi
 # done
 # -----------------------------------------------------------------------------
 declare -ar ENV_VARS_BASE=(
-    "HOME"       # Home directory of the current user
-    "COLUMNS"    # Terminal width for formatting
+    "HOME"
+    "COLUMNS"
 )
 
 # -----------------------------------------------------------------------------
@@ -440,14 +455,16 @@ declare -ar ENV_VARS_BASE=(
 #          dynamically during runtime. Otherwise, it inherits only the base
 #          environment variables.
 #
-#          - `SUDO_USER`: Identifies the user who invoked the script using `sudo`.
+#          - `SUDO_USER`: Identifies the user who invoked the script using
+#            `sudo`.
 #
-# @note Ensure `ENV_VARS_BASE` is properly defined before constructing `ENV_VARS`.
+# @note Ensure `ENV_VARS_BASE` is properly defined before constructing
+#       `ENV_VARS`.
 #
 # @example
 # for var in "${ENV_VARS[@]}"; do
 #     if [[ -z "${!var}" ]]; then
-#         echo "Error: Required environment variable '$var' is not set."
+#         printf "Error: Required environment variable '%s' is not set.\n" "$var"
 #         exit 1
 #     fi
 # done
@@ -470,7 +487,7 @@ fi
 # @default 80
 #
 # @example
-# echo "The terminal width is set to $COLUMNS columns."
+# printf "The terminal width is set to %d columns.\n" "$COLUMNS"
 # -----------------------------------------------------------------------------
 COLUMNS="${COLUMNS:-80}"
 
@@ -478,21 +495,23 @@ COLUMNS="${COLUMNS:-80}"
 # @var SYSTEM_READS
 # @type array
 # @brief List of critical system files to check.
-# @details Defines the absolute paths to system files that the script depends on
-#          for its execution. These files must be present and readable to ensure
-#          the script operates correctly. The following files are included:
+# @details Defines the absolute paths to system files that the script depends
+#          on for its execution. These files must be present and readable to
+#          ensure the script operates correctly. The following files are
+#          included:
 #          - `/etc/os-release`: Contains operating system identification data.
 #
 # @example
 # for file in "${SYSTEM_READS[@]}"; do
 #     if [[ ! -r "$file" ]]; then
-#         echo "Error: Required system file '$file' is missing or not readable."
+#         printf "Error: Required system file '%s' is missing or not
+#               readable.\n" "$file"
 #         exit 1
 #     fi
 # done
 # -----------------------------------------------------------------------------
 declare -ar SYSTEM_READS=(
-    "/etc/os-release"    # OS identification file
+    "/etc/os-release"
 )
 readonly SYSTEM_READS
 
@@ -500,10 +519,10 @@ readonly SYSTEM_READS
 # @var APT_PACKAGES
 # @type array
 # @brief List of required APT packages.
-# @details Defines the APT packages that the script depends on for its execution.
-#          These packages should be available in the system's default package
-#          repository. The script will check for their presence and attempt to
-#          install any missing packages as needed.
+# @details Defines the APT packages that the script depends on for its
+#          execution. These packages should be available in the system's
+#          default package repository. The script will check for their presence
+#          and attempt to install any missing packages as needed.
 #
 #          Packages included:
 #          - `jq`: JSON parsing utility.
@@ -511,13 +530,13 @@ readonly SYSTEM_READS
 # @example
 # for pkg in "${APT_PACKAGES[@]}"; do
 #     if ! dpkg -l "$pkg" &>/dev/null; then
-#         echo "Error: Required package '$pkg' is not installed."
+#         printf "Error: Required package '%s' is not installed.\n" "$pkg"
 #         exit 1
 #     fi
 # done
 # -----------------------------------------------------------------------------
 readonly APT_PACKAGES=(
-    "jq"   # JSON parsing utility
+    "jq"  # JSON parsing utility
 )
 
 # -----------------------------------------------------------------------------
@@ -538,11 +557,29 @@ readonly APT_PACKAGES=(
 # WARN_STACK_TRACE=true ./template.sh  # Enable stack traces for warnings.
 # WARN_STACK_TRACE=false ./template.sh # Disable stack traces for warnings.
 # -----------------------------------------------------------------------------
-readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"  # Default to false if not set.
+readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"
 
 ############
 ### Template Functions
 ############
+
+# -----------------------------------------------------------------------------
+# @brief Handles shell exit operations, displaying session statistics.
+# @details This function is called automatically when the shell exits. It
+#          calculates and displays the number of commands executed during
+#          the session and the session's end timestamp. It is intended to
+#          provide users with session statistics before the shell terminates.
+#
+# @global EXIT This signal is trapped to call the `egress` function upon shell
+#              termination.
+#
+# @note The function uses `history | wc -l` to count the commands executed in
+#       the current session and `date` to capture the session end time.
+# -----------------------------------------------------------------------------
+egress() {
+    # TODO: Add any cleanup items here
+    true
+}
 
 # -----------------------------------------------------------------------------
 # @brief Starts the debug process.
@@ -654,8 +691,8 @@ debug_print() {
 
     # Print debug information if the debug flag is set
     if [[ "$debug" == "debug" ]]; then
-        printf "[DEBUG in %s] '%s' from %s():%d.\n" \
-        "$THIS_SCRIPT" "$message" "$caller_name" "$caller_line" >&2
+        printf "[DEBUG in %s] %b from %s():%d.\n" \
+            "$THIS_SCRIPT" "$message" "$caller_name" "$caller_line" >&2
     fi
 }
 
@@ -723,8 +760,16 @@ debug_end() {
 # -----------------------------------------------------------------------------
 stack_trace() {
     # Determine log level and message
-    local level="${1:-INFO}"  # Default to INFO if $1 is not provided
+    local level="${1:-INFO}"
     local message=""
+    # Block width and character for header/footer
+    local char="-"
+
+    # Recalculate terminal columns
+    COLUMNS=$( (command -v tput >/dev/null && tput cols) || printf "80")
+    COLUMNS=$((COLUMNS > 0 ? COLUMNS : 80)) # Ensure COLUMNS is a positive number
+    local width
+    width=${COLUMNS:-80}                    # Max console width
 
     # Check if $1 is a valid level, otherwise treat it as the message
     case "$level" in
@@ -732,7 +777,6 @@ stack_trace() {
             shift
             ;;
         *)
-            # If $1 is not valid, treat it as the beginning of the message
             message="$level"
             level="INFO"
             shift
@@ -743,263 +787,210 @@ stack_trace() {
     for arg in "$@"; do
         message+="$arg "
     done
-    # Trim trailing space
-    message="${message% }"
-
-    # Block width and character for header/footer
-    local width=60
-    local char="-"
+    # Trim leading/trailing whitespace
+    message=$(printf "%s" "$message" | xargs)
 
     # Define functions to skip
     local skip_functions=("die" "warn" "stack_trace")
     local encountered_main=0 # Track the first occurrence of main()
 
-    # Get the current function name in title case
+    # Generate title case function name for the banner
     local raw_function_name="${FUNCNAME[0]}"
-    local function_name
-    function_name="$(printf "%s" "$raw_function_name" | sed -E 's/_/ /g; s/\b(.)/\U\1/g; s/(\b[A-Za-z])([A-Za-z]*)/\1\L\2/g')"
+    local header_name header_level
+    header_name=$(printf "%s" "$raw_function_name" | sed -E 's/_/ /g; s/\b(.)/\U\1/g; s/(\b[A-Za-z])([A-Za-z]*)/\1\L\2/g')
+    header_level=$(printf "%s" "$level" | sed -E 's/\b(.)/\U\1/g; s/(\b[A-Za-z])([A-Za-z]*)/\1\L\2/g')
+    header_name="$header_level $header_name"
 
-    # -------------------------------------------------------------------------
-    # @brief Determines if a function should be skipped in the stack trace.
-    # @details Skips functions specified in the `skip_functions` list and
-    #          ignores duplicate `main()` entries.
-    #
-    # @param $1 Function name to evaluate.
-    #
-    # @return 0 if the function should be skipped, 1 otherwise.
-    #
-    # @example
-    # should_skip "main" && continue
-    # -------------------------------------------------------------------------
+    # Helper: Skip irrelevant functions
     should_skip() {
         local func="$1"
         for skip in "${skip_functions[@]}"; do
             if [[ "$func" == "$skip" ]]; then
-                return 0 # Skip this function
+                return 0
             fi
         done
-        # Skip duplicate main()
-        if [[ "$func" == "main" ]]; then
-            if (( encountered_main > 0 )); then
-                return 0 # Skip subsequent occurrences of main
-            fi
-            ((encountered_main++))
+        if [[ "$func" == "main" && $encountered_main -gt 0 ]]; then
+            return 0
         fi
-        return 1 # Do not skip
+        [[ "$func" == "main" ]] && ((encountered_main++))
+        return 1
     }
 
-    # Iterate through the stack to build the displayed stack
+    # Build the stack trace
     local displayed_stack=()
-    local longest_length=0  # Track the longest function name length
-
-    # Handle a piped script calling stack_trace from main
-    if [[ -p /dev/stdin && ${#FUNCNAME[@]} == 1 ]]; then
-        displayed_stack+=("$(printf "%s|%s" "main()" "${BASH_LINENO[0]}")")
-    fi
-
-    # Handle the rest of the stack
+    local longest_length=0
     for ((i = 1; i < ${#FUNCNAME[@]}; i++)); do
         local func="${FUNCNAME[i]}"
         local line="${BASH_LINENO[i - 1]}"
         local current_length=${#func}
 
-        # Skip ignored functions
         if should_skip "$func"; then
             continue
         elif (( current_length > longest_length )); then
             longest_length=$current_length
         fi
 
-        # Prepend the formatted stack entry to reverse the order
-        displayed_stack=("$(printf "%s|%s" \
-            "$func()" \
-            "$line")" \
-            "${displayed_stack[@]}")
+        displayed_stack=("$(printf "%s|%s" "$func()" "$line")" "${displayed_stack[@]}")
     done
 
-    # -------------------------------------------------------------------------
-    # @brief Provides a fallback for `tput` commands when errors occur.
-    # @details Returns an empty string if `tput` fails, ensuring no errors
-    #          propagate during color or formatting setup.
-    #
-    # @param $@ Command-line arguments passed directly to `tput`.
-    #
-    # @return Output of `tput` if successful, or an empty string if it fails.
-    #
-    # @example
-    # local bold=$(safe_tput bold)
-    # -------------------------------------------------------------------------
-    safe_tput() { tput "$@" 2>/dev/null || printf ""; }
-
     # General text attributes
-    local reset bold
-    reset=$(safe_tput sgr0)
-    bold=$(safe_tput bold)
+    local reset="\033[0m"     # Reset text formatting
+    local bold="\033[1m"      # Bold text
 
     # Foreground colors
-    local fgred fggrn fgylw fgylw fgblu fgmag fgmag fgcyn fggld
-    fgred=$(safe_tput setaf 1)  # Red text
-    fggrn=$(safe_tput setaf 2)  # Green text
-    fgylw=$(safe_tput setaf 3)  # Yellow text
-    fgblu=$(safe_tput setaf 4)  # Blue text
-    fgmag=$(safe_tput setaf 5)  # Magenta text
-    fgcyn=$(safe_tput setaf 6)  # Cyan text
-    fggld=$(safe_tput setaf 220)  # Gold text
-    [[ -z "$fggld" ]] && fggld="$fgylw"  # Fallback to yellow
+    local fgred="\033[31m"    # Red text
+    local fggrn="\033[32m"    # Green text
+    local fgylw="\033[33m"    # Yellow text
+    local fgblu="\033[34m"    # Blue text
+    local fgmag="\033[35m"    # Magenta text
+    local fgcyn="\033[36m"    # Cyan text
+    local fggld="\033[38;5;220m"  # Gold text (ANSI 256 color)
 
-    # Determine color and label based on the log level
+    # Determine color and label based on level
     local color label
     case "$level" in
-        DEBUG) color=${fgcyn}; label="[DEBUG]";;
-        INFO) color=${fggrn}; label="[INFO ]";;
-        WARN|WARNING) color=${fggld}; label="[WARN ]";;
-        ERROR) color=${fgmag}; label="[ERROR]";;
-        CRIT|CRITICAL) color=${fgred}; label="[CRIT ]";;
+        DEBUG) color=$fgcyn; label="[DEBUG]";;
+        INFO) color=$fggrn; label="[INFO ]";;
+        WARN|WARNING) color=$fggld; label="[WARN ]";;
+        ERROR) color=$fgmag; label="[ERROR]";;
+        CRIT|CRITICAL) color=$fgred; label="[CRIT ]";;
     esac
 
-    # Create header
-    local dash_count=$(( (width - ${#function_name} - 2) / 2 ))
+    # Create header and footer
+    local dash_count=$(( (width - ${#header_name} - 2) / 2 ))
     local header_l header_r
-    header_l="$(printf '%*s' "$dash_count" '' | tr ' ' "$char")"
+    header_l="$(printf '%*s' "$dash_count" | tr ' ' "$char")"
     header_r="$header_l"
-    [[ $(( (width - ${#function_name}) % 2 )) -eq 1 ]] && header_r="${header_r}${char}"
-    local header
-    header=$(printf "%b%s%b %b%b%s%b %b%s%b" \
-        "${color}" \
-        "${header_l}" \
-        "${reset}" \
-        "${color}" \
-        "${bold}" \
-        "${function_name}" \
-        "${reset}" \
-        "${color}" \
-        "${header_r}" \
-        "${reset}")
-
-    # Create footer
+    [[ $(( (width - ${#header_name}) % 2 )) -eq 1 ]] && header_r="${header_r}${char}"
+    local header=$(printf "%b%s%b %b%b%s%b %b%s%b" \
+        "$color" "$header_l" "$reset" "$color" "$bold" "$header_name" "$reset" "$color" "$header_r" "$reset")
     local footer
-    footer="$(printf '%*s' "$width" "" | tr ' ' "$char")"
-    [[ -n "$color" ]] && footer="${color}${footer}${reset}"
+    footer="$(printf '%b%s%b' "$color" "$(printf '%*s' "$width" | tr ' ' "$char")" "$reset")"
 
     # Print header
     printf "%s\n" "$header"
 
     # Print the message, if provided
     if [[ -n "$message" ]]; then
-        # Extract the first word and preserve the rest
-        local first="${message%% *}"    # Extract up to the first space
-        local remainder="${message#* }" # Remove the first word and the space
-
-        # Format the message
-        message="$(printf "%b%b%s%b %b%s%b" \
-            "${bold}" "${color}" "$first" \
-            "${reset}" "${color}" "$remainder" \
-            "${reset}")"
-
+        # Fallback mechanism for wrap_messages
+        local result primary overflow secondary
+        if command -v wrap_messages >/dev/null 2>&1; then
+            result=$(wrap_messages "$width" "$message" || true)
+            primary="${result%%${delimiter}*}"
+            result="${result#*${delimiter}}"
+            overflow="${result%%${delimiter}*}"
+        else
+            primary="$message"
+        fi
         # Print the formatted message
-        printf "%b\n" "$message"
+        printf "%b%s%b\n" "${color}" "${primary}" "${reset}"
+        printf "%b%s%b\n" "${color}" "${overflow}" "${reset}"
     fi
 
-    # Calculate indent for proper alignment
-    local indent
-    indent=$(( (width / 2) - ((longest_length + 28) / 2) ))
-
-    # Print the displayed stack in reverse order
-    for ((i = ${#displayed_stack[@]} - 1, idx = 0; i >= 0; i--, idx++)); do
-        IFS='|' read -r func line <<< "${displayed_stack[i]}"
-        printf "%b%*s [%d] Function: %-*s Line: %4s%b\n" \
-            "${color}" \
-            "$indent" \
-            ">" \
-            "$idx" \
-            "$((longest_length + 2))" \
-            "$func" \
-            "$line" \
-            "${reset}"
-    done
+    # Print stack trace
+    local indent=$(( ($width / 2) - ((longest_length + 28) / 2) ))
+    indent=$(( indent < 0 ? 0 : indent ))
+    if [[ -z "${displayed_stack[*]}" ]]; then
+        printf "%b[WARN ]%b Stack trace is empty.\n" "$fggld" "$reset" >&2
+    else
+        for ((i = ${#displayed_stack[@]} - 1, idx = 0; i >= 0; i--, idx++)); do
+            IFS='|' read -r func line <<< "${displayed_stack[i]}"
+            printf "%b%*s [%d] Function: %-*s Line: %4s%b\n" \
+                "$color" "$indent" ">" "$idx" "$((longest_length + 2))" "$func" "$line" "$reset"
+        done
+    fi
 
     # Print footer
-    printf "%b%s%b\n\n" "${color}" "$footer" "${reset}"
+    printf "%s\n\n" "$footer"
 }
 
 # -----------------------------------------------------------------------------
-# @brief Logs a warning message with optional additional details and
-#        formatting.
-# @details This function outputs a formatted warning message with color and
-#          positional information (script name, function, and line number).
-#          If additional details are provided, they are included in the
-#          message. The function also supports including an error code and
-#          handling stack traces if enabled.
+# @brief Logs a warning message with optional details and stack trace.
+# @details This function logs a warning message with color-coded formatting
+#          and optional details. It adjusts the output to fit within the
+#          terminal's width and supports message wrapping if the
+#          `wrap_messages` function is available. If `WARN_STACK_TRACE` is set
+#          to `true`, a stack trace is also logged.
 #
-# @param $1 [optional] The primary message to log. Defaults to "A warning was
-#                      raised on this line" if not provided.
-# @param $@ [optional] Additional details to include in the warning message.
+# @param $1 [Optional] The primary warning message. Defaults to
+#                      "A warning was raised on this line" if not provided.
+# @param $@ [Optional] Additional details to include in the warning message.
+#
+# @global FALLBACK_SCRIPT_NAME The name of the script to use if the script
+#                              name cannot be determined.
+# @global FUNCNAME             Bash array containing the function call stack.
+# @global BASH_LINENO          Bash array containing the line numbers of
+#                              function calls in the stack.
+# @global WRAP_DELIMITER       The delimiter used for separating wrapped
+#                              message parts.
+# @global WARN_STACK_TRACE     If set to `true`, a stack trace will be logged.
+# @global COLUMNS              The terminal's column width, used to format
+#                              the output.
 #
 # @return None.
 #
 # @example
-# warn "File not found" "Please check the file path."
+# warn "Configuration file missing." "Please check /etc/config."
+# warn "Invalid syntax in the configuration file."
+#
+# @note This function requires `tput` for terminal width detection and ANSI
+#       formatting, with fallbacks for minimal environments.
 # -----------------------------------------------------------------------------
 warn() {
     # Initialize variables
-    local script="${THIS_SCRIPT:-unknown}"       # This script's name
-    local func_name="${FUNCNAME[1]:-main}"       # Calling function
-    local caller_line=${BASH_LINENO[0]:-0}       # Calling line
-    local error_code=""                          # Error code, default blank
-    local message=""                             # Primary message
-    local details=""                             # Additional details
-    local width=${COLUMNS:-80}                   # Max console width
-    local delimiter="␞"                          # Delimiter for wrapped parts
+    local script="${FALLBACK_SCRIPT_NAME:-unknown}"  # This script's name
+    local func_name="${FUNCNAME[1]:-main}"          # Calling function
+    local caller_line=${BASH_LINENO[0]:-0}          # Calling line
 
-    # -------------------------------------------------------------------------
-    # @brief Provides a fallback for `tput` commands when errors occur.
-    # @details Returns an empty string if `tput` fails, ensuring no errors
-    #          propagate during color or formatting setup.
-    #
-    # @param $@ Command-line arguments passed directly to `tput`.
-    #
-    # @return Output of `tput` if successful, or an empty string if it fails.
-    #
-    # @example
-    #     local bold=$(safe_tput bold)
-    # -------------------------------------------------------------------------
-    safe_tput() { tput "$@" 2>/dev/null || printf ""; }
+    # Get valid error code
+    local error_code
+    if [[ -n "${1:-}" && "$1" =~ ^[0-9]+$ ]]; then
+        error_code=$((10#$1))  # Convert to numeric
+        shift
+    else
+        error_code=1  # Default to 1 if not numeric
+    fi
 
-    # General text attributes
-    local reset bold
-    reset=$(safe_tput sgr0)
-    bold=$(safe_tput bold)
+    # Configurable delimiter
+    local delimiter="${WRAP_DELIMITER:-␞}"
 
-    # Foreground colors
-    local fgred fggrn fgylw fgylw fgblu fgmag fgmag fgcyn fggld
-    fgred=$(safe_tput setaf 1)  # Red text
-    fggrn=$(safe_tput setaf 2)  # Green text
-    fgylw=$(safe_tput setaf 3)  # Yellow text
-    fgblu=$(safe_tput setaf 4)  # Blue text
-    fgmag=$(safe_tput setaf 5)  # Magenta text
-    fgcyn=$(safe_tput setaf 6)  # Cyan text
-    fggld=$(safe_tput setaf 220)  # Gold text
-    [[ -z "$fggld" ]] && fggld="$fgylw"  # Fallback to yellow
+    # Get the primary message
+    local message
+    message=$(sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//' <<< "${1:-A warning was raised on this line}")
+    [[ $# -gt 0 ]] && shift
 
-    # -------------------------------------------------------------------------
-    # @brief Creates a formatted prefix for logging messages.
-    # @details Combines color, labels, and positional information into a
-    #          prefix.
-    #
-    # @param $1 [required] Color for the prefix.
-    # @param $2 [required] Label for the message (e.g., "[WARN ]").
-    #
-    # @return [string] Formatted prefix as a string.
-    #
-    # @example
-    # local warn_prefix=$(format_prefix "$fggld" "[WARN ]")
-    # -------------------------------------------------------------------------
+    # Process details
+    local details
+    details=$(sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//' <<< "$*")
+
+    # Recalculate terminal columns
+    COLUMNS=$( (command -v tput >/dev/null && tput cols) || printf "80")
+    COLUMNS=$((COLUMNS > 0 ? COLUMNS : 80)) # Ensure COLUMNS is a positive number
+    local width
+    width=${COLUMNS:-80}                    # Max console width
+
+    # Escape sequences for colors and attributes
+    local reset="\033[0m"           # Reset text
+    local bold="\033[1m"            # Bold text
+    local fggld="\033[38;5;220m"    # Gold text
+    local fgcyn="\033[36m"          # Cyan text
+    local fgblu="\033[34m"          # Blue text
+
+    # Format prefix
     format_prefix() {
-        local color=$1
-        local label=$2
-        printf "%b%s%b %b[%s:%s:%s]%b " \
-            "${bold}${color}" "$label" "${reset}" \
-            "${bold}" "$script" "$func_name" "$caller_line" "${reset}"
+        local color=${1:-"\033[0m"}
+        local label="${2:-'[WARN ] [unknown:main:0]'}"
+        # Create prefix
+        printf "%b%b%s%b %b[%s:%s:%s]%b " \
+            "${bold}" \
+            "${color}" \
+            "${label}" \
+            "${reset}" \
+            "${bold}" \
+            "${script}" \
+            "${func_name}" \
+            "${caller_line}" \
+            "${reset}"
     }
 
     # Generate prefixes
@@ -1009,47 +1000,23 @@ warn() {
     dets_prefix=$(format_prefix "$fgblu" "[DETLS]")
 
     # Strip ANSI escape sequences for length calculation
-    local plain_warn_prefix prefix_length adjusted_width
-    plain_warn_prefix=$(echo -e "$warn_prefix" | sed 's/\x1b\[[0-9;]*m//g')
-    prefix_length=${#plain_warn_prefix}
-    adjusted_width=$((width - prefix_length))
+    local plain_warn_prefix adjusted_width
+    plain_warn_prefix=$(printf "%s" "$warn_prefix" | sed -E 's/(\x1b\[[0-9;]*[a-zA-Z]|\x1b\([a-zA-Z])//g; s/^[[:space:]]*//; s/[[:space:]]*$//')
+    adjusted_width=$((width - ${#plain_warn_prefix} - 1))
 
-    # Parse error code if the first parameter is numeric
-    if [[ -n "${1:-}" && "$1" =~ ^[0-9]+$ ]]; then
-        error_code=$((10#$1))  # Convert to numeric
-        shift
+    # Fallback mechanism for `wrap_messages`
+    local result primary overflow secondary
+    if command -v wrap_messages >/dev/null 2>&1; then
+        result=$(wrap_messages "$adjusted_width" "$message" "$details" || true)
+        primary="${result%%${delimiter}*}"
+        result="${result#*${delimiter}}"
+        overflow="${result%%${delimiter}*}"
+        secondary="${result#*${delimiter}}"
+    else
+        primary="$message"
+        overflow=""
+        secondary="$details"
     fi
-
-    # Process primary message
-    message=$(add_period "${1:-A warning was raised on this line}")
-    if [[ -n "$error_code" ]]; then
-        message=$(printf "%s Code: (%d)" "$message" "$error_code")
-    fi
-    shift
-
-    # Process additional details
-    details="${1:-}"
-    shift
-    for arg in "$@"; do
-        details+=" $arg"
-    done
-    if [[ -n $details ]]; then
-        details=$(add_period "$details")
-    fi
-
-    # Call wrap_and_combine_messages
-    local result
-    result=$(wrap_messages "$adjusted_width" "$message" "$details")
-
-    # Parse wrapped parts
-    # shellcheck disable=SC2295
-    local primary="${result%%${delimiter}*}"
-    # shellcheck disable=SC2295
-    result="${result#*${delimiter}}"
-    # shellcheck disable=SC2295
-    local overflow="${result%%${delimiter}*}"
-    # shellcheck disable=SC2295
-    local secondary="${result#*${delimiter}}"
 
     # Print the primary message
     printf "%s%s\n" "$warn_prefix" "$primary" >&2
@@ -1068,91 +1035,92 @@ warn() {
         done <<< "$secondary"
     fi
 
-    # Include stack trace for warnings if enabled
+    # Execute stack trace if WARN_STACK_TRACE is enabled
     if [[ "${WARN_STACK_TRACE:-false}" == "true" ]]; then
-        stack_trace "WARNING" "$message"
+        stack_trace "WARNING" "${message}" "${secondary}"
     fi
 }
 
 # -----------------------------------------------------------------------------
-# @brief Terminates the script with a critical error message and details.
-# @details This function prints a critical error message along with optional
-#          details, formats them with color and indentation, and includes a
-#          stack trace for debugging. It then exits with the specified error
-#          code.
+# @brief Terminates the script with a critical error message.
+# @details This function is used to log a critical error message with optional
+#          details and exit the script with the specified error code. It
+#          supports formatting the output with ANSI color codes, dynamic
+#          column widths, and optional multi-line message wrapping.
 #
-# @param $1 [optional] Numeric error code. Defaults to 1 if not provided.
-# @param $2 [optional] Primary error message. Defaults to "Critical error"
-#                      if not provided.
-# @param $@ [optional] Additional details or context for the error.
+#          If the optional `wrap_messages` function is available, it will be
+#          used to wrap and combine messages. Otherwise, the function falls
+#          back to printing the primary message and details as-is.
 #
-# @global THIS_SCRIPT The script's name, used for logging.
-# @global COLUMNS Console width, used to calculate message formatting.
+# @param $1 [optional] Numeric error code. Defaults to 1.
+# @param $2 [optional] Primary error message. Defaults to "Critical error".
+# @param $@ [optional] Additional details to include in the error message.
 #
-# @throws Exits the script with the provided error code or the default
-#         value (1).
+# @global FALLBACK_SCRIPT_NAME The script name to use as a fallback.
+# @global FUNCNAME             Bash array containing the call stack.
+# @global BASH_LINENO          Bash array containing line numbers of the stack.
+# @global WRAP_DELIMITER       Delimiter used when combining wrapped messages.
+# @global COLUMNS              The terminal's column width, used to adjust
+#                              message formatting.
 #
-# @return None. Outputs formatted error messages and terminates the script.
+# @return None. This function does not return.
+# @exit Exits the script with the specified error code.
 #
 # @example
-# die 127 "File not found" "The specified file is missing or inaccessible."
+# die 127 "File not found" "Please check the file path and try again."
+# die "Critical configuration error"
 # -----------------------------------------------------------------------------
 die() {
     # Initialize variables
-    local script="${THIS_SCRIPT:-unknown}"       # This script's name
-    local func_name="${FUNCNAME[1]:-main}"       # Calling function
-    local caller_line=${BASH_LINENO[0]:-0}       # Calling line
-    local error_code=""                          # Error code, default blank
-    local message=""                             # Primary message
-    local details=""                             # Additional details
-    local width=${COLUMNS:-80}                   # Max console width
-    local delimiter="␞"                          # Delimiter for wrapped parts
+    local script="${FALLBACK_SCRIPT_NAME:-unknown}"  # This script's name
+    local func_name="${FUNCNAME[1]:-main}"          # Calling function
+    local caller_line=${BASH_LINENO[0]:-0}          # Calling line
 
-    # -------------------------------------------------------------------------
-    # @brief Provides a fallback for `tput` commands when errors occur.
-    # @details Returns an empty string if `tput` fails, ensuring no errors
-    #          propagate during color or formatting setup.
-    #
-    # @param $@ Command-line arguments passed directly to `tput`.
-    #
-    # @return Output of `tput` if successful, or an empty string if it fails.
-    #
-    # @example
-    # local bold=$(safe_tput bold)
-    # -------------------------------------------------------------------------
-    safe_tput() {
-        tput "$@" 2>/dev/null || printf ""
-    }
+    # Get valid error code
+    if [[ -n "${1:-}" && "$1" =~ ^[0-9]+$ ]]; then
+        error_code=$((10#$1))  # Convert to numeric
+        shift
+    else
+        error_code=1  # Default to 1 if not numeric
+    fi
 
-    # General text attributes
-    local reset bold
-    reset=$(safe_tput sgr0)
-    bold=$(safe_tput bold)
+    # Configurable delimiter
+    local delimiter="${WRAP_DELIMITER:-␞}"
 
+    # Process the primary message
+    local message
+    message=$(sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//' <<< "${1:-Critical error}")
+
+    # Only shift if there are remaining arguments
+    [[ $# -gt 0 ]] && shift
+
+    # Process details
+    local details
+    details=$(sed -E 's/^[[:space:]]*//;s/[[:space:]]*$//' <<< "$*")
+
+    # Recalculate terminal columns
+    COLUMNS=$( (command -v tput >/dev/null && tput cols) || printf "80")
+    COLUMNS=$((COLUMNS > 0 ? COLUMNS : 80)) # Ensure COLUMNS is a positive number
+    local width
+    width=${COLUMNS:-80}                    # Max console width
+
+    # Escape sequences as safe(r) alternatives to global tput values
+    # General attributes
+    local reset="\033[0m"
+    local bold="\033[1m"
     # Foreground colors
-    local fgred fgblu fgcyn
-    fgred=$(safe_tput setaf 1)  # Red text
-    fgblu=$(safe_tput setaf 4)  # Blue text
-    fgcyn=$(safe_tput setaf 6)  # Cyan text
+    local fgred="\033[31m" # Red text
+    local fgcyn="\033[36m" # Cyan text
+    local fgblu="\033[34m" # Blue text
 
-    # -------------------------------------------------------------------------
-    # @brief Formats a log message prefix with a specified label and color.
-    # @details Constructs a formatted prefix string that includes the label,
-    #          the script name, the calling function name, and the line number.
-    #
-    # @param $1 [required] Color for the label (e.g., `$fgred` for red text).
-    # @param $2 [required] Label for the prefix (e.g., "[CRIT ]").
-    #
-    # @return A formatted prefix string with color and details.
-    #
-    # @example
-    # local crit_prefix=$(format_prefix "$fgred" "[CRIT ]")
-    # -------------------------------------------------------------------------
+    # Format prefix
     format_prefix() {
-        local color=$1
-        local label=$2
-        printf "%b%s%b %b[%s:%s:%s]%b " \
-            "${bold}${color}" \
+        local color=${1:-"\033[0m"}
+        local label="${2:-'[CRIT ] [unknown:main:0]'}"
+        # Create prefix
+        printf "%b%b%s%b %b[%s:%s:%s]%b " \
+            "${bold}" \
+            "${color}" \
             "${label}" \
             "${reset}" \
             "${bold}" \
@@ -1169,49 +1137,23 @@ die() {
     dets_prefix=$(format_prefix "$fgblu" "[DETLS]")
 
     # Strip ANSI escape sequences for length calculation
-    local plain_crit_prefix
-    plain_crit_prefix=$(echo -e "$crit_prefix" | sed 's/\x1b\[[0-9;]*m//g')
-    local prefix_length=${#plain_crit_prefix}
-    local adjusted_width=$((width - prefix_length))
+    local plain_crit_prefix adjusted_width
+    plain_crit_prefix=$(printf "%s" "$crit_prefix" | sed -E 's/(\x1b\[[0-9;]*[a-zA-Z]|\x1b\([a-zA-Z])//g; s/^[[:space:]]*//; s/[[:space:]]*$//')
+    adjusted_width=$((width - ${#plain_crit_prefix} - 1))
 
-    # Parse error code if the first parameter is numeric, default to 1
-    if [[ -n "${1:-}" && "$1" =~ ^[0-9]+$ ]]; then
-        error_code=$((10#$1))  # Convert to numeric
-        shift
+    # Fallback mechanism for `wrap_messages` since it is external
+    local result primary overflow secondary
+    if command -v wrap_messages >/dev/null 2>&1; then
+        result=$(wrap_messages "$adjusted_width" "$message" "$details" || true)
+        primary="${result%%${delimiter}*}"
+        result="${result#*${delimiter}}"
+        overflow="${result%%${delimiter}*}"
+        secondary="${result#*${delimiter}}"
     else
-        error_code=1  # Default to 1 if no numeric value is provided
+        primary="$message"
+        overflow=""
+        secondary="$details"
     fi
-
-    # Process primary message
-    message=$(add_period "${1:-Critical error}")
-    if [[ -n "$error_code" ]]; then
-        message=$(printf "%s Code: (%d)" "$message" "$error_code")
-    fi
-    shift
-
-    # Process additional details
-    details="${1:-}"
-    shift
-    for arg in "$@"; do
-        details+=" $arg"
-    done
-    if [[ -n $details ]]; then
-        details=$(add_period "$details")
-    fi
-
-    # Call wrap_and_combine_messages
-    local result
-    result=$(wrap_messages "$adjusted_width" "$message" "$details")
-
-    # Parse wrapped parts
-    # shellcheck disable=SC2295
-    local primary="${result%%${delimiter}*}"
-    # shellcheck disable=SC2295
-    result="${result#*${delimiter}}"
-    # shellcheck disable=SC2295
-    local overflow="${result%%${delimiter}*}"
-    # shellcheck disable=SC2295
-    local secondary="${result#*${delimiter}}"
 
     # Print the primary message
     printf "%s%s\n" "$crit_prefix" "$primary" >&2
@@ -1230,109 +1172,84 @@ die() {
         done <<< "$secondary"
     fi
 
-    # Include stack trace for warnings if enabled
-    stack_trace "CRITICAL" "$message"
+    # Execute stack trace
+    stack_trace "CRITICAL" "${message}" "${secondary}"
+
+    # Exit with the specified error code
     exit "$error_code"
 }
 
 # -----------------------------------------------------------------------------
-# @brief Wraps a message into lines with ellipses for overflow or continuation.
-# @details This function splits the message into lines, appending an ellipsis
-#          for overflowed lines and prepending it for continuation lines. The
-#          primary and secondary messages are processed separately and combined
-#          with a delimiter.
+# @brief Add a dot (`.`) at the beginning of a string if it's missing.
+# @details This function ensures the input string starts with a leading dot.
+#          If the input string is empty, the function logs a warning and
+#          returns an error code.
 #
-# @param $1 [required] The message string to wrap.
-# @param $2 [required] Maximum width of each line (numeric).
-# @param $3 [optional] The secondary message string to include (defaults to
-#                      an empty string).
+# @param $1 The input string to process.
 #
-# @global None.
-#
-# @throws None.
-#
-# @return A single string with wrapped lines and ellipses added as necessary.
-#         The primary and secondary messages are separated by a delimiter.
+# @return Outputs the modified string with a leading dot if it was missing.
+# @retval 1 If the input string is empty.
 #
 # @example
-# wrapped=$(wrap_messages "This is a long message" 50)
-# echo "$wrapped"
+# add_dot "example"   # Outputs ".example"
+# add_dot ".example"  # Outputs ".example"
+# add_dot ""          # Logs a warning and returns an error.
 # -----------------------------------------------------------------------------
-wrap_messages() {
-    local line_width=$1 # Maximum width of each line
-    local primary=$2    # Primary message string
-    local secondary=$3  # Secondary message string
-    local delimiter="␞" # ASCII delimiter (code 30) for separating messages
+add_dot() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
-    # -------------------------------------------------------------------------
-    # @brief Wraps a message into lines with ellipses for overflow or
-    #        continuation.
-    # @details Splits the message into lines, appending an ellipsis for
-    #          overflowed lines and prepending it for continuation lines.
-    #
-    # @param $1 [required] The message string to wrap.
-    # @param $2 [required] Maximum width of each line (numeric).
-    #
-    # @global None.
-    #
-    # @throws None.
-    #
-    # @return A single string with wrapped lines, ellipses added as necessary.
-    #
-    # @example
-    # wrapped=$(wrap_message "This is a long message" 50)
-    # echo "$wrapped"
-    # -------------------------------------------------------------------------
-    wrap_message() {
-        local message=$1        # Input message to wrap
-        local width=$2          # Maximum width of each line
-        local result=()         # Array to store wrapped lines
-        local adjusted_width=$((width - 2))  # Adjust width for ellipses
+    local input=${1:-}  # Input string to process
 
-        # Process message line-by-line
-        while IFS= read -r line; do
-            result+=("$line")
-        done <<< "$(printf "%s\n" "$message" | fold -s -w "$adjusted_width")"
-
-        # Add ellipses to wrapped lines
-        for ((i = 0; i < ${#result[@]}; i++)); do
-            if ((i == 0)); then
-                # Append ellipsis to the first line
-                result[i]="${result[i]% }…"
-            elif ((i == ${#result[@]} - 1)); then
-                # Prepend ellipsis to the last line
-                result[i]="…${result[i]}"
-            else
-                # Add ellipses to both ends of middle lines
-                result[i]="…${result[i]% }…"
-            fi
-        done
-
-        # Return the wrapped lines as a single string
-        printf "%s\n" "${result[@]}"
-    }
-
-    # Process the primary message
-    local overflow=""          # Stores overflow lines from the primary message
-    if [[ ${#primary} -gt $line_width ]]; then
-        local wrapped_primary  # Temporarily stores the wrapped primary message
-        wrapped_primary=$(wrap_message "$primary" "$line_width")
-        overflow=$(printf "%s\n" "$wrapped_primary" | tail -n +2)
-        primary=$(printf "%s\n" "$wrapped_primary" | head -n 1)
+    # Validate input
+    if [[ -z "$input" ]]; then
+        warn "Input to add_dot cannot be empty."
+            debug_end "$debug"
+        return 1
     fi
 
-    # Process the secondary message
-    if [[ ${#secondary} -gt $line_width ]]; then
-        secondary=$(wrap_message "$secondary" "$line_width")
+    # Add a leading dot if it's missing
+    if [[ "$input" != .* ]]; then
+        input=".$input"
     fi
 
-    # Return the combined messages
-    printf "%s%b%s%b%s" \
-        "$primary" \
-        "$delimiter" \
-        "$overflow" \
-        "$delimiter" \
-        "$secondary"
+    debug_end "$debug"
+    printf "%s\n" "$input"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Removes a leading dot from the input string, if present.
+# @details This function checks if the input string starts with a dot (`.`)
+#          and removes it. If the input is empty, an error message is logged.
+#          The function handles empty strings by returning an error and logging
+#          an appropriate warning message.
+#
+# @param $1 [required] The input string to process.
+#
+# @return 0 on success, 1 on failure (when the input is empty).
+#
+# @example
+# remove_dot ".hidden"  # Output: "hidden"
+# remove_dot "visible"  # Output: "visible"
+# -----------------------------------------------------------------------------
+remove_dot() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    local input=${1:-}  # Input string to process
+
+    # Validate input
+    if [[ -z "$input" ]]; then
+        warn "ERROR" "Input to remove_dot cannot be empty."
+        debug_end "$debug"
+        return 1
+    fi
+
+    # Remove the leading dot if present
+    if [[ "$input" == *. ]]; then
+        input="${input#.}"
+    fi
+
+    debug_end "$debug"
+    printf "%s\n" "$input"
 }
 
 # -----------------------------------------------------------------------------
@@ -1348,7 +1265,7 @@ wrap_messages() {
 #
 # @example
 # result=$(add_period "Hello")
-# echo "$result"  # Output: "Hello."
+# printf "%s\n" "$result"  # Output: "Hello."
 # -----------------------------------------------------------------------------
 add_period() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
@@ -1373,13 +1290,14 @@ add_period() {
 
 # -----------------------------------------------------------------------------
 # @brief Remove a trailing period (`.`) from a string if present.
-# @details This function processes the input string and removes a trailing period
-#          if it exists. If the input string is empty, the function logs an error
-#          and returns an error code.
+# @details This function processes the input string and removes a trailing
+#          period if it exists. If the input string is empty, the function logs
+#          an error and returns an error code.
 #
 # @param $1 The input string to process.
 #
-# @return Outputs the modified string without a trailing period if one was present.
+# @return Outputs the modified string without a trailing period if one was
+#         present.
 # @retval 1 If the input string is empty.
 #
 # @example
@@ -1387,7 +1305,6 @@ add_period() {
 # remove_period "example"   # Outputs "example"
 # remove_period ""          # Logs an error and returns an error code.
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
 remove_period() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1407,6 +1324,101 @@ remove_period() {
 
     debug_end "$debug"
     printf "%s\n" "$input"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Add a trailing slash (`/`) to a string if it's missing.
+# @details This function ensures that the input string ends with a trailing
+#          slash. If the input string is empty, the function logs an error and
+#          returns an error code.
+#
+# @param $1 The input string to process.
+#
+# @return Outputs the modified string with a trailing slash if one was missing.
+# @retval 1 If the input string is empty.
+#
+# @example
+# add_slash "/path/to/directory"  # Outputs "/path/to/directory/"
+# add_slash "/path/to/directory/" # Outputs "/path/to/directory/"
+# add_slash ""                    # Logs an error and returns an error code.
+# -----------------------------------------------------------------------------
+add_slash() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    local input="$1"  # Input string to process
+
+    # Validate input
+    if [[ -z "${input:-}" ]]; then
+        warn "ERROR" "Input to add_slash cannot be empty."
+            debug_end "$debug"
+        return 1
+    fi
+
+    # Add a trailing slash if it's missing
+    if [[ "$input" != */ ]]; then
+        input="$input/"
+    fi
+
+    debug_end "$debug"
+    printf "%s\n" "$input"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Remove a trailing slash (`/`) from a string if present.
+# @details This function ensures that the input string does not end with a
+#          trailing slash. If the input string is empty, the function logs an
+#          error and returns an error code.
+#
+# @param $1 The input string to process.
+#
+# @return Outputs the modified string without a trailing slash if one was
+#         present.
+# @retval 1 If the input string is empty.
+#
+# @example
+# remove_slash "/path/to/directory/"  # Outputs "/path/to/directory"
+# remove_slash "/path/to/directory"   # Outputs "/path/to/directory"
+# remove_slash ""                     # Logs an error and returns an error code
+# -----------------------------------------------------------------------------
+remove_slash() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    local input="$1"  # Input string to process
+
+    # Validate input
+    if [[ -z "${input:-}" ]]; then
+        warn "ERROR" "Input to remove_slash cannot be empty."
+            debug_end "$debug"
+        return 1
+    fi
+
+    # Remove the trailing slash if present
+    if [[ "$input" == */ ]]; then
+        input="${input%/}"
+    fi
+
+    debug_end "$debug"
+    printf "%s\n" "$input"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Pauses execution and waits for user input to continue.
+# @details This function displays a message prompting the user to press any key
+#          to continue. It waits for a key press, then resumes execution.
+#
+# @example
+# pause
+# -----------------------------------------------------------------------------
+pause() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    printf "Press any key to continue.\n"
+    read -n 1 -sr key < /dev/tty || true
+    printf "\n"
+    debug_print "$key" "$debug"
+
+    debug_end "$debug"
+    return 0
 }
 
 ############
@@ -1440,11 +1452,11 @@ print_system() {
     system_name=$(grep '^PRETTY_NAME=' /etc/os-release 2>/dev/null | cut -d '=' -f2 | tr -d '"')
 
     # Debug: Log extracted system name
-    debug_print "Extracted system name: ${system_name:-<empty>}\n" "$debug"
+    debug_print "Extracted system name: ${system_name:-<empty>}" "$debug"
 
     # Check if system_name is empty and log accordingly
     if [[ -z "${system_name:-}" ]]; then
-        warn "System: Unknown (could not extract system information)."  # Log warning if system information is unavailable
+        warn "System: Unknown (could not extract system information)."
         debug_print "System information could not be extracted." "$debug"
     else
         logI "System: $system_name."  # Log the system information
@@ -1483,7 +1495,7 @@ print_version() {
     if [[ "$caller" == "process_args" ]]; then
         printf "%s: version %s\n" "$THIS_SCRIPT" "$SEM_VER" # Display the script name and version
     else
-        logI "Running $(repo_to_title_case "$REPO_NAME")'s '$THIS_SCRIPT', version $SEM_VER" # Log the script name and version
+        logI "Running $REPO_DISPLAY_NAME's '$THIS_SCRIPT', version $SEM_VER"
     fi
 
     debug_end "$debug"
@@ -1535,21 +1547,16 @@ enforce_sudo() {
         fi
     fi
 
-    debug_print "Function parameters:" \
-        "\n\t- REQUIRE_SUDO='${REQUIRE_SUDO:-(not set)}'" \
-        "\n\t- EUID='$EUID'" \
-        "\n\t- SUDO_USER='${SUDO_USER:-(not set)}'" \
-        "\n\t- SUDO_COMMAND='${SUDO_COMMAND:-(not set)}'" "$debug"
-
     debug_end "$debug"
     return 0
 }
 
 # -----------------------------------------------------------------------------
 # @brief Check for required dependencies and report any missing ones.
-# @details Iterates through the dependencies listed in the global array `DEPENDENCIES`,
-#          checking if each one is installed. Logs missing dependencies and exits
-#          the script with an error code if any are missing.
+# @details Iterates through the dependencies listed in the global array
+#          `DEPENDENCIES`, checking if each one is installed. Logs missing
+#          dependencies and exits the script with an error code if any are
+#          missing.
 #
 # @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
 #
@@ -1593,8 +1600,9 @@ validate_depends() {
 
 # -----------------------------------------------------------------------------
 # @brief Check the availability of critical system files.
-# @details Verifies that each file listed in the `SYSTEM_READS` array exists and is readable.
-#          Logs an error for any missing or unreadable files and exits the script if any issues are found.
+# @details Verifies that each file listed in the `SYSTEM_READS` array exists
+#          and is readable. Logs an error for any missing or unreadable files
+#          and exits the script if any issues are found.
 #
 # @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
 #
@@ -1638,8 +1646,9 @@ validate_sys_accs() {
 
 # -----------------------------------------------------------------------------
 # @brief Validate the existence of required environment variables.
-# @details Checks if the environment variables specified in the `ENV_VARS` array
-#          are set. Logs any missing variables and exits the script if any are missing.
+# @details Checks if the environment variables specified in the `ENV_VARS`
+#          array are set. Logs any missing variables and exits the script if
+#          any are missing.
 #
 # @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
 #
@@ -1682,8 +1691,9 @@ validate_env_vars() {
 
 # -----------------------------------------------------------------------------
 # @brief Check if the script is running in a Bash shell.
-# @details Ensures the script is executed with Bash, as it may use Bash-specific features.
-#          If the "debug" argument is passed, detailed logging will be displayed for each check.
+# @details Ensures the script is executed with Bash, as it may use Bash-
+#          specific features. If the "debug" argument is passed, detailed
+#          logging will be displayed for each check.
 #
 # @param $1 [Optional] "debug" to enable verbose output for all checks.
 #
@@ -1711,14 +1721,17 @@ check_bash() {
 
 # -----------------------------------------------------------------------------
 # @brief Check if the current Bash version meets the minimum required version.
-# @details Compares the current Bash version against a required version specified
-#          in the global variable `MIN_BASH_VERSION`. If `MIN_BASH_VERSION` is "none",
-#          the check is skipped. Outputs debug information if enabled.
+# @details Compares the current Bash version against a required version
+#          specified in the global variable `MIN_BASH_VERSION`. If
+#          `MIN_BASH_VERSION` is "none", the check is skipped. Outputs debug
+#          information if enabled.
 #
 # @param $1 [Optional] "debug" to enable verbose output for this check.
 #
-# @global MIN_BASH_VERSION Minimum required Bash version (e.g., "4.0") or "none".
-# @global BASH_VERSINFO Array containing the major and minor versions of the running Bash.
+# @global MIN_BASH_VERSION Minimum required Bash version (e.g., "4.0") or
+#                          "none".
+# @global BASH_VERSINFO Array containing the major and minor versions of the
+#         running Bash.
 #
 # @return None
 # @exit 1 if the Bash version is insufficient.
@@ -1760,8 +1773,8 @@ check_sh_ver() {
 
 # -----------------------------------------------------------------------------
 # @brief Check Raspbian OS version compatibility.
-# @details This function ensures that the Raspbian version is within the supported
-#          range and logs an error if the compatibility check fails.
+# @details This function ensures that the Raspbian version is within the
+#          supported range and logs an error if the compatibility check fails.
 #
 # @param $1 [Optional] "debug" to enable verbose output for this check.
 #
@@ -1770,7 +1783,8 @@ check_sh_ver() {
 # @global log_message Function for logging messages.
 # @global die Function to handle critical errors and terminate the script.
 #
-# @return None Exits the script with an error code if the OS version is incompatible.
+# @return None Exits the script with an error code if the OS version is
+#         incompatible.
 #
 # @example
 # check_release
@@ -1818,10 +1832,122 @@ check_release() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Validate proxy connectivity by testing a known URL.
+# @details Uses `check_url` to verify connectivity through the provided proxy
+#          settings.
+#
+# @param $1 [Optional] Proxy URL to validate (defaults to `http_proxy` or
+#                      `https_proxy` if not provided).
+# @param $2 [Optional] "debug" to enable verbose output for the proxy
+#                      validation.
+#
+# @global http_proxy The HTTP proxy URL (if set).
+# @global https_proxy The HTTPS proxy URL (if set).
+#
+# @return 0 if the proxy is functional, 1 otherwise.
+#
+# @example
+# validate_proxy "http://myproxy.com:8080"
+# validate_proxy debug
+# -----------------------------------------------------------------------------
+validate_proxy() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Check if proxy_url is passed
+    local proxy_url=""
+    # Check if proxy_url is the first argument (if set)
+    if [[ -n "$1" && "$1" =~ ^https?:// ]]; then
+        # First argument is proxy_url
+        proxy_url="$1"
+        shift  # Move to the next argument
+    fi
+
+    # Default to global proxy settings if no proxy is provided
+    [[ -z "${proxy_url:-}" ]] && proxy_url="${http_proxy:-$https_proxy}"
+
+    # Validate that a proxy is set
+    if [[ -z "${proxy_url:-}" ]]; then
+        warn "No proxy URL configured for validation."
+            debug_end "$debug"
+        return 1
+    fi
+
+    logI "Validating proxy: $proxy_url"
+
+    # Test the proxy connectivity using check_url (passing the debug flag)
+    if check_url "$proxy_url" "curl" "--silent --head --max-time 10 --proxy $proxy_url" "$debug"; then
+        logI "Proxy $proxy_url is functional."
+        debug_print "Proxy $proxy_url is functional." "$debug"
+            debug_end "$debug"
+        return 0
+    else
+        warn "Proxy $proxy_url is unreachable or misconfigured."
+        debug_print "Proxy $proxy_url failed validation." "$debug"
+            debug_end "$debug"
+        return 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Check connectivity to a URL using a specified tool.
+# @details Attempts to connect to a given URL with `curl` or `wget` based on
+#          the provided arguments. Ensures that the tool's availability is
+#          checked and handles timeouts gracefully. Optionally prints debug
+#          information if the "debug" flag is set.
+#
+# @param $1 The URL to test.
+# @param $2 The tool to use for the test (`curl` or `wget`).
+# @param $3 Options to pass to the testing tool (e.g., `--silent --head` for
+#           `curl`).
+# @param $4 [Optional] "debug" to enable verbose output during the check.
+#
+# @return 0 if the URL is reachable, 1 otherwise.
+#
+# @example
+# check_url "http://example.com" "curl" "--silent --head" debug
+# -----------------------------------------------------------------------------
+check_url() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    local url="$1"
+    local tool="$2"
+    local options="$3"
+
+    # Validate inputs
+    if [[ -z "${url:-}" ]]; then
+        printf "ERROR: URL and tool parameters are required for check_url.\n" >&2
+            debug_end "$debug"
+        return 1
+    fi
+
+    # Check tool availability
+    if ! command -v "$tool" &>/dev/null; then
+        printf "ERROR: Tool '%s' is not installed or unavailable.\n" "$tool" >&2
+            debug_end "$debug"
+        return 1
+    fi
+
+    # Perform the connectivity check, allowing SSL and proxy errors
+    local retval
+    # shellcheck disable=2086
+    if $tool $options "$url" &>/dev/null; then
+        debug_print "Successfully connected to $#url using $tool." "$debug"
+        retval=0
+    else
+        debug_print "Failed to connect to $url using $tool." "$debug"
+        retval=1
+    fi
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # @brief Comprehensive internet and proxy connectivity check.
-# @details Combines proxy validation and direct internet connectivity tests;
-#          Validates proxy configuration first, then tests connectivity with
-#          and without proxies. Outputs debug information if enabled.
+# @details Combines proxy validation and direct internet connectivity tests
+#          using `check_url`. Validates proxy configuration first, then tests
+#          connectivity with and without proxies. Outputs debug information if
+#          enabled.
 #
 # @param $1 [Optional] "debug" to enable verbose output for all checks.
 #
@@ -1860,14 +1986,14 @@ check_internet() {
         if $proxy_valid && curl --silent --head --max-time 10 --proxy "${http_proxy:-${https_proxy:-}}" "$primary_url" &>/dev/null; then
             logI "Internet is available using curl with proxy."
             debug_print "curl successfully connected via proxy." "$debug"
-                    debug_end "$debug"
+            debug_end "$debug"
             return 0
         fi
 
         # Check without proxy
         if curl --silent --head --max-time 10 "$primary_url" &>/dev/null; then
             debug_print "curl successfully connected without proxy." "$debug"
-                    debug_end "$debug"
+            debug_end "$debug"
             return 0
         fi
 
@@ -1884,7 +2010,7 @@ check_internet() {
         if $proxy_valid && wget --spider --quiet --timeout=10 --proxy="${http_proxy:-${https_proxy:-}}" "$primary_url" &>/dev/null; then
             logI "Internet is available using wget with proxy."
             debug_print "wget successfully connected via proxy." "$debug"
-                    debug_end "$debug"
+            debug_end "$debug"
             return 0
         fi
 
@@ -1892,7 +2018,7 @@ check_internet() {
         if wget --spider --quiet --timeout=10 "$secondary_url" &>/dev/null; then
             logI "Internet is available using wget without proxy."
             debug_print "wget successfully connected without proxy." "$debug"
-                    debug_end "$debug"
+            debug_end "$debug"
             return 0
         fi
 
@@ -1964,10 +2090,95 @@ pad_with_spaces() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Wraps a message into lines with ellipses for overflow or continuation.
+# @details This function splits the message into lines, appending an ellipsis
+#          for overflowed lines and prepending it for continuation lines. The
+#          primary and secondary messages are processed separately and combined
+#          with a delimiter.
+#
+# @param $1 [required] The message string to wrap.
+# @param $2 [required] Maximum width of each line (numeric).
+# @param $3 [optional] The secondary message string to include (defaults to
+#                      an empty string).
+#
+# @global None.
+#
+# @throws None.
+#
+# @return A single string with wrapped lines and ellipses added as necessary.
+#         The primary and secondary messages are separated by a delimiter.
+#
+# @example
+# wrapped=$(wrap_messages "This is a long message" 50)
+# printf "%s\n" "$result" "$wrapped"
+# -----------------------------------------------------------------------------
+wrap_messages() {
+    local line_width=$1
+    local primary=$2
+    local secondary=${3:-}
+    local delimiter="␞"
+
+    # Validate input
+    if [[ -z "$line_width" || ! "$line_width" =~ ^[0-9]+$ || "$line_width" -le 1 ]]; then
+        printf "Error: Invalid line width '%s' in %s(). Must be a positive integer.\n" \
+            "$line_width" "${FUNCNAME[0]}" >&2
+        return 1
+    fi
+
+    # Inner function to wrap a single message
+    wrap_message() {
+        local message=$1
+        local width=$2
+        local result=()
+        # Address faulty width with a min of 10
+        local adjusted_width=$((width > 10 ? width - 1 : 10))
+
+        while IFS= read -r line; do
+            result+=("$line")
+        done <<< "$(printf "%s\n" "$message" | fold -s -w "$adjusted_width")"
+
+        for ((i = 0; i < ${#result[@]}; i++)); do
+            result[i]=$(printf "%s" "${result[i]}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            if ((i == 0)); then
+                result[i]="${result[i]}…"
+            elif ((i == ${#result[@]} - 1)); then
+                result[i]="…${result[i]}"
+            else
+                result[i]="…${result[i]}…"
+            fi
+        done
+
+        printf "%s\n" "${result[@]}"
+    }
+
+    # Process primary message
+    local overflow=""
+    if [[ ${#primary} -gt $line_width ]]; then
+        local wrapped_primary
+        wrapped_primary=$(wrap_message "$primary" "$line_width")
+        overflow=$(printf "%s\n" "$wrapped_primary" | tail -n +2)
+        primary=$(printf "%s\n" "$wrapped_primary" | head -n 1)
+    fi
+
+    # Process secondary message
+    if [[ -n ${#secondary} && ${#secondary} -gt $line_width ]]; then
+        secondary=$(wrap_message "$secondary" "$line_width")
+    fi
+
+    # Combine results
+    printf "%s%b%s%b%s" \
+        "$primary" \
+        "$delimiter" \
+        "$overflow" \
+        "$delimiter" \
+        "$secondary"
+}
+
+# -----------------------------------------------------------------------------
 # @brief Log a message with optional details to the console and/or file.
-# @details Handles combined logic for logging to console and/or file, supporting
-#          optional details. If details are provided, they are logged with an
-#          "[EXTENDED]" tag.
+# @details Handles combined logic for logging to console and/or file,
+#          supporting optional details. If details are provided, they are
+#          logged with an "[EXTENDED]" tag.
 #
 # @param $1 Timestamp of the log entry.
 # @param $2 Log level (e.g., DEBUG, INFO, WARN, ERROR).
@@ -1976,7 +2187,8 @@ pad_with_spaces() {
 # @param $5 The main log message.
 # @param $6 [Optional] Additional details for the log entry.
 #
-# @global LOG_OUTPUT Specifies where to output logs ("console", "file", or "both").
+# @global LOG_OUTPUT Specifies where to output logs ("console", "file", or
+#         "both").
 # @global LOG_FILE File path for log storage if `LOG_OUTPUT` includes "file".
 # @global THIS_SCRIPT The name of the current script.
 # @global RESET ANSI escape code to reset text formatting.
@@ -1995,7 +2207,7 @@ print_log_entry() {
 
     # Skip logging if the message is empty
     if [[ -z "$message" ]]; then
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
@@ -2052,20 +2264,24 @@ prepare_log_context() {
 
 # -----------------------------------------------------------------------------
 # @brief Log a message with the specified log level.
-# @details Logs messages to both the console and/or a log file, depending on the
-#          configured log output. The function uses the `LOG_PROPERTIES` associative
-#          array to determine the log level, color, and severity. If the "debug"
-#          argument is provided, debug logging is enabled for additional details.
+# @details Logs messages to both the console and/or a log file, depending on
+#          the configured log output. The function uses the `LOG_PROPERTIES`
+#          associative array to determine the log level, color, and severity.
+#          If the "debug" argument is provided, debug logging is enabled for
+#          additional details.
 #
-# @param $1 Log level (e.g., DEBUG, INFO, ERROR). The log level controls the message severity.
+# @param $1 Log level (e.g., DEBUG, INFO, ERROR). The log level controls the
+#           message severity.
 # @param $2 Main log message to log.
 # @param $3 [Optional] Debug flag. Pass "debug" to enable debug output.
 #
 # @global LOG_LEVEL The current logging verbosity level.
-# @global LOG_PROPERTIES Associative array defining log level properties, such as severity and color.
+# @global LOG_PROPERTIES Associative array defining log level properties, such
+#         as severity and color.
 # @global LOG_FILE Path to the log file (if configured).
 # @global USE_CONSOLE Boolean flag to enable or disable console output.
-# @global LOG_OUTPUT Specifies where to log messages ("file", "console", "both").
+# @global LOG_OUTPUT Specifies where to log messages ("file", "console",
+#         "both").
 #
 # @return None
 #
@@ -2079,12 +2295,12 @@ log_message() {
     # Ensure the calling function is log_message_with_severity()
     if [[ "${FUNCNAME[1]}" != "log_message_with_severity" ]]; then
         warn "log_message() can only be called from log_message_with_severity()."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
-    local level="UNSET"          # Default to "UNSET" if no level is provided
-    local message="<no message>" # Default to "<no message>" if no message is provided
+    local level="UNSET"
+    local message="<no message>"
 
     local context timestamp lineno custom_level color severity config_severity
 
@@ -2103,7 +2319,7 @@ log_message() {
     # Validate the log level and message if needed
     if [[ "$level" == "UNSET" || -z "${LOG_PROPERTIES[$level]:-}" || "$message" == "<no message>" ]]; then
         warn "Invalid log level '$level' or empty message."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
@@ -2128,13 +2344,13 @@ log_message() {
     # Check for valid severity level
     if [[ -z "$config_severity" || ! "$config_severity" =~ ^[0-9]+$ ]]; then
         warn "Malformed severity value for level '$LOG_LEVEL'."
-            debug_end "$debug"
+        debug_end "$debug"
         return 1
     fi
 
     # Skip logging if the message's severity is below the configured threshold
     if (( severity < config_severity )); then
-            debug_end "$debug"
+        debug_end "$debug"
         return 0
     fi
 
@@ -2158,7 +2374,8 @@ log_message() {
 # @return None
 #
 # @example
-# log_message_with_severity "ERROR" "This is an error message" "Additional details" "debug"
+# log_message_with_severity "ERROR" /
+#   "This is an error message" "Additional details" "debug"
 # -----------------------------------------------------------------------------
 log_message_with_severity() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
@@ -2172,17 +2389,22 @@ log_message_with_severity() {
     fi
 
     # Initialize variables
-    local severity="$1"   # Level is always passed as the first argument to log_message_with_severity
+    local severity="INFO" # Default to INFO
     local message=""
     local extended_message=""
+
+    # Get level if it exists (must be one of the predefined values)
+    if [[ -n "$1" && "$1" =~ ^(DEBUG|INFO|WARNING|ERROR|CRITICAL|EXTENDED)$ ]]; then
+        severity="$1"
+    fi
 
     # Process arguments
     if [[ -n "$2" ]]; then
         message="$2"
     else
         warn "Message is required."
-            debug_end "$debug"
-        exit 1
+        debug_end "$debug"
+        return 1
     fi
 
     if [[ -n "$3" ]]; then
@@ -2191,7 +2413,7 @@ log_message_with_severity() {
 
     # Print debug information if the flag is set
     debug_print "Logging message at severity '$severity' with message='$message'." "$debug"
-    debug_print "Extended message: '$extended_message'" "$debug"
+    [[ -n "$extended_message" ]] && debug_print "Extended message: '$extended_message'" "$debug"
 
     # Log the primary message
     log_message "$severity" "$message" "$debug"
@@ -2207,13 +2429,16 @@ log_message_with_severity() {
 
 # -----------------------------------------------------------------------------
 # @brief Logging wrapper functions for various severity levels.
-# @details These functions provide shorthand access to `log_message_with_severity()`
-#          with a predefined severity level. They standardize the logging process
-#          by ensuring consistent severity labels and argument handling.
+# @details These functions provide shorthand access to
+#          `log_message_with_severity()` with a predefined severity level. They
+#          standardize the logging process by ensuring consistent severity
+#          labels and argument handling.
 #
 # @param $1 [string] The primary log message. Must not be empty.
-# @param $2 [optional, string] The extended message for additional details (optional), sent to logX.
-# @param $3 [optional, string] The debug flag. If set to "debug", enables debug-level logging.
+# @param $2 [optional, string] The extended message for additional details
+#           (optional), sent to logX.
+# @param $3 [optional, string] The debug flag. If set to "debug", enables
+#           debug-level logging.
 #
 # @global None
 #
@@ -2236,33 +2461,38 @@ log_message_with_severity() {
 #   logX "Additional debug information for extended analysis."
 # -----------------------------------------------------------------------------
 # shellcheck disable=2329
-logD() { log_message_with_severity "DEBUG" "$1" "${2:-}" "${3:-}"; }
+logD() { log_message_with_severity "DEBUG" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=2329
-logI() { log_message_with_severity "INFO" "$1" "${2:-}" "${3:-}"; }
+logI() { log_message_with_severity "INFO" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=2329
-logW() { log_message_with_severity "WARNING" "$1" "${2:-}" "${3:-}"; }
+logW() { log_message_with_severity "WARNING" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=2329
-logE() { log_message_with_severity "ERROR" "$1" "${2:-}" "${3:-}"; }
+logE() { log_message_with_severity "ERROR" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=2329
-logC() { log_message_with_severity "CRITICAL" "$1" "${2:-}" "${3:-}"; }
+logC() { log_message_with_severity "CRITICAL" "${1:-}" "${2:-}" "${3:-}"; }
 # shellcheck disable=2329
-logX() { log_message_with_severity "EXTENDED" "$1" "${2:-}" "${3:-}"; }
+logX() { log_message_with_severity "EXTENDED" "${1:-}" "${2:-}" "${3:-}"; }
 
 # -----------------------------------------------------------------------------
-# @brief Ensure the log file exists and is writable, with fallback to `/tmp` if necessary.
-# @details This function validates the specified log file's directory to ensure it exists and is writable.
-#          If the directory is invalid or inaccessible, it attempts to create it. If all else fails,
-#          the log file is redirected to `/tmp`. A warning message is logged if fallback is used.
+# @brief Ensure the log file exists and is writable, with fallback to `/tmp` if
+#        necessary.
+# @details This function validates the specified log file's directory to ensure
+#          it exists and is writable. If the directory is invalid or
+#          inaccessible, it attempts to create it. If all else fails, the log
+#          file is redirected to `/tmp`. A warning message is logged if
+#          fallback is used.
 #
 # @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
 #
 # @global LOG_FILE Path to the log file (modifiable to fallback location).
-# @global THIS_SCRIPT The name of the script (used to derive fallback log file name).
+# @global THIS_SCRIPT The name of the script (used to derive fallback log file
+#         name).
 #
 # @return None
 #
 # @example
-# init_log "debug"  # Ensures log file is created and available for writing with debug output.
+# init_log "debug"  # Ensures log file is created and available for writing
+#                   # with debug output.
 # -----------------------------------------------------------------------------
 init_log() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
@@ -2331,9 +2561,10 @@ init_log() {
 # -----------------------------------------------------------------------------
 # @brief Retrieve the terminal color code or attribute.
 #
-# @details This function uses `tput` to retrieve a terminal color code or attribute
-#          (e.g., sgr0 for reset, bold for bold text). If the attribute is unsupported
-#          by the terminal, it returns an empty string.
+# @details This function uses `tput` to retrieve a terminal color code or
+#          attribute (e.g., `sgr0` for reset, `bold` for bold text). If the
+#          attribute is unsupported by the terminal, it returns an empty
+#          string.
 #
 # @param $1 The terminal color code or attribute to retrieve.
 #
@@ -2350,9 +2581,10 @@ default_color() {
 
 # -----------------------------------------------------------------------------
 # @brief Initialize terminal colors and text formatting.
-# @details This function sets up variables for foreground colors, background colors,
-#          and text formatting styles. It checks terminal capabilities and provides
-#          fallback values for unsupported or non-interactive environments.
+# @details This function sets up variables for foreground colors, background
+#          colors, and text formatting styles. It checks terminal capabilities
+#          and provides fallback values for unsupported or non-interactive
+#          environments.
 #
 # @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
 #
@@ -2366,6 +2598,7 @@ init_colors() {
 
     # General text attributes
     BOLD=$(default_color bold)
+    DIM=$(default_color dim)
     SMSO=$(default_color smso)
     RMSO=$(default_color rmso)
     UNDERLINE=$(default_color smul)
@@ -2406,16 +2639,11 @@ init_colors() {
     # Reset all
     RESET=$(default_color sgr0)
 
-
-
     # Set variables as readonly
-    # shellcheck disable=SC2034
+    # shellcheck disable=2303
     readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE
-    # shellcheck disable=SC2034
     readonly BLINK NO_BLINK ITALIC NO_ITALIC MOVE_UP CLEAR_LINE
-    # shellcheck disable=SC2034
     readonly FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST FGGLD
-    # shellcheck disable=SC2034
     readonly BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
 
     debug_end "$debug"
@@ -2423,10 +2651,60 @@ init_colors() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Generate a separator string for terminal output.
+# @details Creates heavy or light horizontal rules based on terminal width.
+#          Optionally outputs debug information if the debug flag is set.
+#
+# @param $1 Type of rule: "heavy" or "light".
+# @param $2 [Optional] Debug flag. Pass "debug" to enable debug output.
+#
+# @return The generated rule string or error message if an invalid type is
+#         provided.
+#
+# @example
+# generate_separator "heavy"
+# -----------------------------------------------------------------------------
+generate_separator() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Normalize separator type to lowercase
+    local type="${1,,}"
+    local width="${COLUMNS:-80}"
+
+    # Validate separator type
+    if [[ "$type" != "heavy" && "$type" != "light" ]]; then
+        warn "Invalid separator type: '$1'. Must be 'heavy' or 'light'."
+            debug_end "$debug"
+        return 1
+    fi
+
+    # Generate the separator based on type
+    case "$type" in
+        heavy)
+            # Generate a heavy separator (═)
+            printf '═%.0s' $(seq 1 "$width")
+            ;;
+        light)
+            # Generate a light separator (─)
+            printf '─%.0s' $(seq 1 "$width")
+            ;;
+        *)
+            # Handle invalid separator type
+            warn "Invalid separator type: $type"
+                    debug_end "$debug"
+            return 1
+            ;;
+    esac
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # @brief Validate the logging configuration, including LOG_LEVEL.
-# @details This function checks whether the current LOG_LEVEL is valid. If LOG_LEVEL is not
-#          defined in the `LOG_PROPERTIES` associative array, it defaults to "INFO" and
-#          displays a warning message.
+# @details This function checks whether the current LOG_LEVEL is valid. If
+#          LOG_LEVEL is not defined in the `LOG_PROPERTIES` associative array,
+#          it defaults to "INFO" and displays a warning message.
 #
 # @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
 #
@@ -2456,15 +2734,17 @@ validate_log_level() {
 # -----------------------------------------------------------------------------
 # @brief Sets up the logging environment for the script.
 #
-# This function initializes terminal colors, configures the logging environment,
-# defines log properties, and validates both the log level and properties.
-# It must be called before any logging-related functions.
-#
 # @details
+# This function initializes terminal colors, configures the logging
+# environment, defines log properties, and validates both the log level and
+# properties. It must be called before any logging-related functions.
+#
 # - Initializes terminal colors using `init_colors`.
 # - Sets up the log file and directory using `init_log`.
-# - Defines global log properties (`LOG_PROPERTIES`), including severity levels, colors, and labels.
-# - Validates the configured log level and ensures all required log properties are defined.
+# - Defines global log properties (`LOG_PROPERTIES`), including severity
+#   levels, colors, and labels.
+# - Validates the configured log level and ensures all required log properties
+#   are defined.
 #
 # @note This function should be called once during script initialization.
 #
@@ -2504,6 +2784,54 @@ setup_log() {
 
     # Validate the log level and log properties
     validate_log_level "$debug"
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Toggle the USE_CONSOLE variable on or off.
+# @details This function updates the global USE_CONSOLE variable to either
+#          "true" (on) or "false" (off) based on the input argument. It also
+#          prints debug messages when the debug flag is passed.
+#
+# @param $1 The desired state: "on" (to enable console logging) or "off" (to
+#           disable console logging).
+# @param $2 [Optional] Debug flag. Pass "debug" to enable debug output.
+#
+# @global USE_CONSOLE The flag to control console logging.
+#
+# @return 0 on success, 1 on invalid input.
+# -----------------------------------------------------------------------------
+toggle_console_log() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Declare local variables
+    local state="${1,,}"      # Convert input to lowercase for consistency
+
+    # Validate $state
+    if [[ "$state" != "on" && "$state" != "off" ]]; then
+        warn "Invalid state: '$state'. Must be 'on' or 'off'."
+            debug_end "$debug"
+        return 1
+    fi
+
+    # Process the desired state
+    case "$state" in
+        on)
+            USE_CONSOLE="true"
+            debug_print "Console logging enabled. USE_CONSOLE='$USE_CONSOLE', CONSOLE_STATE='$CONSOLE_STATE'" "$debug"
+            ;;
+        off)
+            USE_CONSOLE="false"
+            debug_print "Console logging disabled. USE_CONSOLE='$USE_CONSOLE', CONSOLE_STATE='$CONSOLE_STATE'" "$debug"
+            ;;
+        *)
+            warn "Invalid argument for toggle_console_log: $state"
+                    debug_end "$debug"
+            return 1
+            ;;
+    esac
 
     debug_end "$debug"
     return 0
@@ -2582,27 +2910,40 @@ repo_to_title_case() {
 # @example
 # download_file "path/to/file.txt" "/local/dir"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
 download_file() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local file_path="$1"
     local dest_dir="$2"
 
-    mkdir -p "$dest_dir"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        debug_print "Create dir: $dest_dir (dry)" "$debug"
+    else
+        debug_print "Exec: mkdir -p $dest_dir" "$debug"
+        mkdir -p "$dest_dir"
+    fi 
 
     local file_name
     file_name=$(basename "$file_path")
     file_name="${file_name//\'/}"
 
-    logI "Downloading from: $GIT_RAW/$REPO_BRANCH/$file_path to $dest_dir/$file_name"
+    debug_print "Downloading from GitHub: /$REPO_BRANCH/$file_path" "$debug"
+    debug_print "Downloading to: $dest_dir/$file_name" "$debug"
 
-    wget -q -O "$dest_dir/$file_name" "$GIT_RAW/$REPO_BRANCH/$file_path" || {
-        warn "Failed to download file: $file_path to $dest_dir/$file_name"
-        return 1
-    }
+    if [[ "$DRY_RUN" == "true" ]]; then
+        debug_print "Exec:  wget -q -O $dest_dir/$file_name $GIT_RAW/$REPO_BRANCH/$file_path"
+    else
+        wget -q -O "$dest_dir/$file_name" "$GIT_RAW/$REPO_BRANCH/$file_path" || {
+            warn "Failed to download file: $file_path to $dest_dir/$file_name"
+            return 1
+        }
+    fi 
 
+    # Sanitize the filename
     local dest_file="$dest_dir/$file_name"
-    mv "$dest_file" "${dest_file//\'/}"
+    local sanitized_file="${dest_file//\'/}"
+    if [[ "$dest_file" != "$sanitized_file" ]]; then
+        mv -f "$dest_file" "$sanitized_file"
+    fi
     debug_end "$debug"
     return
 }
@@ -2616,7 +2957,8 @@ download_file() {
 # @global GIT_API The base URL for the GitHub API, pointing to the repository.
 # @global REPO_BRANCH The branch name to fetch the tree from.
 #
-# @throws Prints an error message and exits if the branch SHA cannot be fetched.
+# @throws Prints an error message and exits if the branch SHA cannot be
+#         fetched.
 #
 # @return Outputs the JSON representation of the repository tree.
 #
@@ -2636,6 +2978,64 @@ fetch_tree() {
     curl -s "$GIT_API/git/trees/$branch_sha?recursive=1"
     debug_end "$debug"
     return
+}
+
+# -----------------------------------------------------------------------------
+# @brief Downloads files from specified directories in a repository.
+# @details This function retrieves a repository tree, identifies files within
+#          specified directories, and downloads them to the local system.
+#
+# @param $1 The target directory to update.
+#
+# @global USER_HOME The home directory of the user, used as the base for
+#         storing files.
+# @global GIT_DIRS Array of directories in the repository to process.
+#
+# @throws Exits the script with an error if the repository tree cannot be
+#         fetched.
+#
+# @return Downloads files to the specified directory structure under
+#         $USER_HOME/apppop.
+#
+# @example
+# download_files_in_directories
+# -----------------------------------------------------------------------------
+download_files_in_directories() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local dest_root="$USER_HOME/$REPO_NAME"
+    logI "Fetching repository tree."
+    local tree=$(fetch_tree)
+
+    if [[ $(printf "%s" "$tree" | jq '.tree | length') -eq 0 ]]; then
+        die 1 "Failed to fetch repository tree. Check repository details or ensure it is public."
+    fi
+
+    for dir in "${GIT_DIRS[@]}"; do
+        logI "Processing directory: $dir"
+
+        local files
+        files=$(printf "%s" "$tree" | jq -r --arg TARGET_DIR "$dir/" \
+            '.tree[] | select(.type=="blob" and (.path | startswith($TARGET_DIR))) | .path')
+
+        if [[ -z "$files" ]]; then
+            logI "No files found in directory: $dir"
+            continue
+        fi
+
+        local dest_dir="$dest_root/$dir"
+        debug_print "Exec: mkdir -p $dest_dir" "$debug"
+        mkdir -p "$dest_dir"
+
+        printf "%s\n" "$files" | while read -r file; do
+            logI "Downloading: $file"
+            download_file "$file" "$dest_dir" "$debug"
+        done
+
+        logI "Files from $dir downloaded to: $dest_dir"
+    done
+
+    debug_end "$debug"
+    logI "Files saved in: $dest_root"
 }
 
 ############
@@ -2662,7 +3062,6 @@ fetch_tree() {
 # @example
 # DRY_RUN=true exec_new_shell "ListFiles" "ls -l" "debug"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
 exec_new_shell() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -2702,31 +3101,35 @@ exec_new_shell() {
 
 # -----------------------------------------------------------------------------
 # @brief Executes a command in a separate Bash process.
-# @details This function manages the execution of a shell command, handling
-#          the display of status messages. It supports dry-run mode, where
-#          the command is simulated without execution. The function prints
-#          success or failure messages and handles the removal of the "Running"
-#          line once the command finishes.
+# @details This function manages the execution of a shell command, handling the
+#          display of status messages. It supports dry-run mode, where the
+#          command is simulated without execution. The function prints success
+#          or failure messages and handles the removal of the "Running" line
+#          once the command finishes.
 #
 # @param exec_name The name of the command or task being executed.
 # @param exec_process The command string to be executed.
-# @param debug Optional flag to enable debug messages. Set to "debug" to enable.
+# @param debug Optional flag to enable debug messages. Set to "debug" to
+#              enable.
 #
 # @return Returns 0 if the command was successful, non-zero otherwise.
 #
 # @note The function supports dry-run mode, controlled by the DRY_RUN variable.
-#       When DRY_RUN is true, the command is only simulated without actual execution.
+#       When DRY_RUN is true, the command is only simulated without actual
+#       execution.
 #
 # @example
-# exec_command "Test Command" "echo Hello World" "debug"
+# exec_command "Test Command" "printf Hello World\n" "debug"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
+# TODO: Move this to template (allow running a function)
 exec_command() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    # Extract action and remaining arguments
+    local parse_result=""; parse_result=$(parse_action_and_args "$@")
+    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
+    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
 
     local exec_name="$1"
-    # shellcheck disable=SC2154 
-    local exec_name=${remove_period $exec_name}
     local exec_process="$2"
 
     # Debug information
@@ -2758,13 +3161,19 @@ exec_command() {
         # Move up & clear ephemeral line
         printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
         printf "%b[✔]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
-            debug_end "$debug"
+        debug_end "$debug"
         return 0
     fi
 
-    # 3) Actually run the command (stdout/stderr handling is up to you):
-    bash -c "$exec_process" &>/dev/null
-    local status=$?
+    # 3) Check if exec_process is a function or a command
+    local status=0
+    if declare -F "$exec_process" &>/dev/null; then
+        # It's a function, pass remaining arguments to the function
+        "$exec_process" "$@" "$debug" "$action" || status=$?
+    else
+        # It's a command, pass remaining arguments to the command
+        bash -c "$exec_process" &>/dev/null || status=$?
+    fi
 
     # 4) Move up & clear ephemeral “Running” line
     printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
@@ -2783,7 +3192,7 @@ exec_command() {
     fi
 
     debug_end "$debug"
-    return "$status"
+    return $status
 }
 
 # -----------------------------------------------------------------------------
@@ -2805,7 +3214,6 @@ exec_command() {
 # exit_script 0 "Completed successfully"
 # exit_script 1 "An error occurred"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
 exit_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -2820,12 +3228,13 @@ exit_script() {
     # Determine exit status if not numeric
     if ! [[ "$exit_status" =~ ^[0-9]+$ ]]; then
         exit_status=1
+        message="${message}"  # No need to overwrite message here
     else
         shift  # Remove the exit_status from the arguments
     fi
 
     # Remove trailing dot if needed
-    message=$(remove_period "$message")
+    message=$(remove_dot "$message")
     # Log the provided or default message
     printf "[EXIT ] '%s' from %s:%d status (%d).\n" "$message" "$caller_func" "$lineno" "$exit_status"
 
@@ -2877,14 +3286,14 @@ start_script() {
 
     # Check terse mode
     if [[ "${TERSE:-false}" == "true" ]]; then
-        logI "$(repo_to_title_case "${REPO_NAME:-Unknown}") $action_message beginning."
+        logI "$REPO_DISPLAY_NAME $action_message beginning."
         debug_print "Skipping interactive message due to terse mode." "$debug"
         debug_end "$debug"
         return 0
     fi
 
     # Prompt user for input
-    printf "\nStarting %s for: %s.\n" "$action_message" "$(repo_to_title_case "${REPO_NAME:-Unknown}")"
+    printf "\nStarting %s for: %s.\n" "$action_message" "$REPO_DISPLAY_NAME"
     printf "Press any key to continue or 'Q' to quit (defaulting in 10 seconds).\n"
 
     # Read a single key with a 10-second timeout
@@ -3019,7 +3428,10 @@ check_hostapd_status() {
 # shellcheck disable=SC2329
 handle_apt_packages() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="${1:-install}"  # Default to "install" if no action is provided
+    # Extract action and remaining arguments
+    local parse_result=""; parse_result=$(parse_action_and_args "$@")
+    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
+    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
 
     # Check if APT_PACKAGES is empty
     if [[ ${#APT_PACKAGES[@]} -eq 0 ]]; then
@@ -3034,11 +3446,11 @@ handle_apt_packages() {
     logI "Updating and managing required packages (this may take a few minutes)."
 
     # Update package list and fix broken installs
-    if ! exec_command "Update local package index" "sudo apt-get update -y" "$debug"; then
+    if ! exec_command "Update local package index" "sudo apt-get update -y" "$debug" "$action"; then
         warn "Failed to update package list."
         ((error_count++))
     fi
-    if ! exec_command "Fixing broken or incomplete package installations" "sudo apt-get install -f -y" "$debug"; then
+    if ! exec_command "Fixing broken or incomplete package installations" "sudo apt-get install -f -y" "$debug" "$action"; then
         warn "Failed to fix broken installs."
         ((error_count++))
     fi
@@ -3047,18 +3459,18 @@ handle_apt_packages() {
     for package in "${APT_PACKAGES[@]}"; do
         if [[ "$action" == "install" ]]; then
             if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-                if ! exec_command "Upgrade $package" "sudo apt-get install --only-upgrade -y $package" "$debug"; then
+                if ! exec_command "Upgrade $package" "sudo apt-get install --only-upgrade -y $package" "$debug" "$action"; then
                     warn "Failed to upgrade package: $package."
                     ((error_count++))
                 fi
             else
-                if ! exec_command "Install $package" "sudo apt-get install -y $package" "$debug"; then
+                if ! exec_command "Install $package" "sudo apt-get install -y $package" "$debug" "$action"; then
                     warn "Failed to install package: $package."
                     ((error_count++))
                 fi
             fi
         elif [[ "$action" == "uninstall" ]]; then
-            if ! exec_command "Remove $package" "sudo apt-get remove -y $package" "$debug"; then
+            if ! exec_command "Remove $package" "sudo apt-get remove -y $package" "$debug" "$action"; then
                 warn "Failed to remove package: $package."
                 ((error_count++))
             fi
@@ -3078,71 +3490,6 @@ handle_apt_packages() {
 
     debug_end "$debug"
     return "$error_count"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Downloads files from specified directories in a repository.
-# @details This function retrieves a repository tree, identifies files within
-#          specified directories, and downloads them to the local system.
-#
-# @param $1 The target directory to update. "install" to download files, "uninstall" to skip.
-#
-# @global USER_HOME The home directory of the user, used as the base for storing files.
-# @global GIT_DIRS Array of directories in the repository to process.
-#
-# @throws Exits the script with an error if the repository tree cannot be fetched.
-#
-# @return Downloads files to the specified directory structure under $USER_HOME/apppop.
-#
-# @example
-# download_files_in_directories "install"
-# download_files_in_directories "uninstall"
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
-download_files_in_directories() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="${1:-install}"  # Default to "install" if no action is provided
-
-    # Return immediately if action is "uninstall"
-    if [[ "$action" == "uninstall" ]]; then
-        debug_end "$debug"
-        return 0
-    fi
-
-    local dest_root="$USER_HOME/$REPO_NAME"
-    logI "Fetching repository tree."
-    local tree
-    tree=$(fetch_tree "$debug")
-
-    if [[ $(printf "%s" "$tree" | jq '.tree | length') -eq 0 ]]; then
-        die 1 "Failed to fetch repository tree. Check repository details or ensure it is public."
-    fi
-
-    for dir in "${GIT_DIRS[@]}"; do
-        logI "Processing directory: $dir"
-
-        local files
-        files=$(printf "%s" "$tree" | jq -r --arg TARGET_DIR "$dir/" \
-            '.tree[] | select(.type=="blob" and (.path | startswith($TARGET_DIR))) | .path')
-
-        if [[ -z "$files" ]]; then
-            logI "No files found in directory: $dir"
-            continue
-        fi
-
-        local dest_dir="$dest_root/$dir"
-        mkdir -p "$dest_dir"
-
-        printf "%s\n" "$files" | while read -r file; do
-            logI "Downloading: $file"
-            download_file "$file" "$dest_dir"
-        done
-
-        logI "Files from $dir downloaded to: $dest_dir"
-    done
-
-    debug_end "$debug"
-    logI "Files saved in: $dest_root"
 }
 
 # -----------------------------------------------------------------------------
@@ -3172,25 +3519,68 @@ download_files_in_directories() {
 # shellcheck disable=SC2329
 install_controller_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="${1:-install}"  # Default to "install" if no action is provided
+    # Extract action and remaining arguments
+    local parse_result=""; parse_result=$(parse_action_and_args "$@")
+    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
+    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+
+    local source_root source_path
+    source_root="$USER_HOME/$REPO_NAME"
+    source_path="$source_root/scripts/$CONTROLLER_SOURCE"
 
     if [[ "$action" == "install" ]]; then
         logI "Installing '$CONTROLLER_NAME'."
 
         # Install the controller script
-        exec_command "Install controller" "cp -f \"$LOCAL_REPO_DIR/scripts/$CONTROLLER_SOURCE\" \"$CONTROLLER_PATH\"" "$debug" || { logE "Failed to install controller."; debug_end "$debug"; return 1; }
+        debug_print "Copying controller." "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: sudo cp -f $source_path $CONTROLLER_PATH"
+        else
+            exec_command "Copy controller script" "sudo cp -f $source_path $CONTROLLER_PATH" || {
+                logE "Failed to install controller."
+                debug_end "$debug"
+                return 1
+            }
+        fi
 
         # Change ownership on the controller
-        exec_command "Change ownership on controller" "chown root:root \"$CONTROLLER_PATH\"" "$debug" || { logE "Failed to change ownership on controller."; debug_end "$debug"; return 1; }
+        debug_print  "Changing ownership on controller." "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: sudo chown root:root $CONTROLLER_PATH"
+        else
+            exec_command "Change ownership on controller" "sudo chown root:root $CONTROLLER_PATH" || {
+                logE "Failed to change ownership on controller."
+                debug_end "$debug"
+                return 1
+            }
+        fi
 
         # Change permissions on the controller to make it executable
-        exec_command "Change permissions on controller" "chmod +x \"$CONTROLLER_PATH\"" "$debug" || { logE "Failed to change permissions on controller."; debug_end "$debug"; return 1; }
+        debug_print  "Change permissions on controller" "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: chmod +x $CONTROLLER_PATH"
+        else
+            exec_command "Change permissions on controller" "sudo chmod +x $CONTROLLER_PATH" || {
+                logE "Failed to change permissions on controller."
+                debug_end "$debug"
+                return 1
+            }
+        fi
 
     elif [[ "$action" == "remove" ]]; then
         logI "Removing '$CONTROLLER_NAME'."
 
         # Remove the controller script
-        exec_command "Remove controller" "rm -f \"$CONTROLLER_PATH\"" "$debug" || { logE "Failed to remove controller."; debug_end "$debug"; return 1; }
+        debug_print "Removing controller" "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: sudo rm -f $CONTROLLER_PATH"
+        else
+            exec_command "Remove controller" "sudo rm -f $CONTROLLER_PATH" || {
+                logE "Failed to remove controller."
+                debug_end "$debug"
+                return 1
+            }
+        fi
     else
         die 1 "Invalid action. Use 'install' or 'remove'."
     fi
@@ -3225,25 +3615,68 @@ install_controller_script() {
 # shellcheck disable=SC2329
 install_application_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="${1:-install}"  # Default to "install" if no action is provided
+    # Extract action and remaining arguments
+    local parse_result=""; parse_result=$(parse_action_and_args "$@")
+    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
+    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+
+    local source_root source path
+    source_root="$USER_HOME/$REPO_NAME"
+    source_path="$source_root/scripts/$APP_SOURCE"
 
     if [[ "$action" == "install" ]]; then
-        logI "Installing '$APP_NAME'."
+        logI "Installing '$CONTROLLER_NAME'."
 
         # Install the application script
-        exec_command "Install application" "cp -f \"$LOCAL_REPO_DIR/scripts/$APP_SOURCE\" \"$APP_PATH\"" "$debug" || { logE "Failed to install application."; debug_end "$debug"; return 1; }
+        debug_print "Copying application." "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: cp -f $source_path $APP_PATH"
+        else
+            exec_command "Instal application script" "sudo cp -f $source_path $APP_PATH" "$debug" || {
+                logE "Failed to install application."
+                debug_end "$debug"
+                return 1
+            }
+        fi
 
         # Change ownership on the application script
-        exec_command "Change ownership on application" "chown root:root \"$APP_PATH\"" "$debug" || { logE "Failed to change ownership on application."; debug_end "$debug"; return 1; }
+        debug_print "Changing ownership on application." "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: sudo chown root:root $APP_PATH"
+        else
+            exec_command "Change ownership on app script" "sudo chown root:root $APP_PATH" "$debug" || {
+                logE "Failed to change ownership on application."
+                debug_end "$debug"
+                return 1
+            }
+        fi
 
         # Change permissions on the application script to make it executable
-        exec_command "Change permissions on application" "chmod +x \"$APP_PATH\"" "$debug" || { logE "Failed to change permissions on application."; debug_end "$debug"; return 1; }
+        debug_print  "Changing permissions on application."
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: chmod +x $APP_PATH"
+        else
+            exec_command "Make app script executable" "sudo chmod +x $APP_PATH" "$debug" "$debug" || {
+                logE "Failed to change permissions on application."
+                debug_end "$debug"
+                return 1
+            }
+        fi
 
     elif [[ "$action" == "remove" ]]; then
-        logI "Removing '$APP_NAME'."
+        logI "Removing '$CONTROLLER_NAME'."
 
         # Remove the application script
-        exec_command "Remove application" "rm -f \"$APP_PATH\"" "$debug" || { logE "Failed to remove application."; debug_end "$debug"; return 1; }
+        debug_print "Removing application."
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: rm -f $APP_PATH"
+        else
+            exec_command "Remove application script" "sudo rm -f $APP_PATH" "$debug" || {
+                logE "Failed to remove application."
+                debug_end "$debug"
+                return 1
+            }
+        fi
     else
         die 1 "Invalid action. Use 'install' or 'remove'."
     fi
@@ -3278,30 +3711,138 @@ install_application_script() {
 # shellcheck disable=SC2329
 install_config_file() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="${1:-install}"  # Default to "install" if no action is provided
+    # Extract action and remaining arguments
+    local parse_result=""; parse_result=$(parse_action_and_args "$@")
+    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
+    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+
+    local source_root source_path
+    source_root="$USER_HOME/$REPO_NAME"
+    source_path="$source_root/conf/$APP_NAME.conf"
 
     if [[ "$action" == "install" ]]; then
         logI "Installing '$APP_NAME' configuration."
 
         # Install the configuration file
-        exec_command "Installing configuration" "cp -f \"$LOCAL_REPO_DIR/conf/$APP_NAME.conf\" \"$CONFIG_FILE\"" "$debug" || { logE "Failed to install configuration."; debug_end "$debug"; return 1; }
+        debug_print "Installing configuration." "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: cp -f $source_path $CONFIG_FILE"
+        else
+            exec_command "Copy config file" "sudo cp -f $source_path $CONFIG_FILE" "$debug" || {
+                logE "Failed to install config file."
+                debug_end "$debug"
+                return 1
+            }
+        fi
 
-        # Change ownership on the configuration file
-        exec_command "Change ownership on configuration file" "chown root:root \"$CONFIG_FILE\"" "$debug" || { logE "Failed to change ownership on configuration file."; debug_end "$debug"; return 1; }
+        # Change ownership on the config file
+        debug_print  "Changing ownership on configuration file." "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: chown root:root $CONFIG_FILE"
+        else
+            exec_command "Change ownership on config file" "sudo chown root:root $CONFIG_FILE" "$debug" || {
+                logE "Failed to change ownership on config file."
+                debug_end "$debug"
+                return 1
+            }
+        fi
 
-        # Optional: Change permissions on the configuration file (if needed)
-        exec_command "Change permissions on configuration file" "chmod 644 \"$CONFIG_FILE\"" "$debug" || { logE "Failed to change permissions on configuration file."; debug_end "$debug"; return 1; }
+        # Change permissions on the configuration file
+        debug_print  "Changing permissions on configuration file" "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: chmod 644 $CONFIG_FILE"
+        else
+            exec_command "Change permissions on config file" "sudo chmod 644 $CONFIG_FILE" "$debug" || {
+                logE "Failed to change permissions on config file."
+                debug_end "$debug"
+                return 1
+            }
+        fi
 
     elif [[ "$action" == "remove" ]]; then
         logI "Removing '$APP_NAME' configuration."
 
         # Remove the configuration file
-        exec_command "Remove configuration" "rm -f \"$CONFIG_FILE\"" "$debug" || { logE "Failed to remove configuration."; debug_end "$debug"; return 1; }
+        debug_print "Removing configuration file." "$debug"
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Exec: rm -f $CONFIG_FILE"
+        else
+            exec_command "Remove config file" "sudo rm -f $CONFIG_FILE" "$debug" || {
+                logE "Failed to remove configuration."
+                debug_end "$debug"
+                return 1
+            }
+        fi
     else
         die 1 "Invalid action. Use 'install' or 'remove'."
     fi
 
     debug_end "$debug"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Replaces a specified string in a script with another string.
+# @details Searches for a string bracketed by "%" in the specified script file
+#          and replaces it with the provided replacement string.
+#
+# @param $1 The path/name of the script file.
+# @param $2 The string to search for (in the format %string_name%).
+# @param $3 The string to replace the search string with.
+#
+# @global None.
+#
+# @throws If the file does not exist or is not writable.
+#
+# @return 0 on success, non-zero on failure.
+#
+# @example
+# replace_string_in_script "script.sh" "%placeholder%" "new_value"
+# -----------------------------------------------------------------------------
+replace_string_in_script() {
+    local debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    # Extract action and remaining arguments
+    local parse_result=""; parse_result=$(parse_action_and_args "$@")
+    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
+    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+
+    local script_file="${1:-}"
+    local search_string="${2:-}"
+    local replacement_string="${3:-}"
+
+    # Validate the inputs
+    if [[ -z "$script_file" || -z "$search_string" || -z "$replacement_string" ]]; then
+        warn "Error: Missing required arguments." "$debug"
+        debug_end "$debug"
+        return 1
+    fi
+
+    if [[ ! -f "$script_file" ]]; then
+        debug_print "Error: File '$script_file' does not exist." "$debug"
+        warn "Error: File '$script_file' does not exist." >&2
+        debug_end "$debug"
+        return 2
+    fi
+
+    if [[ ! -w "$script_file" ]]; then
+        warn "Error: File '$script_file' is not writable." >&2
+        debug_end "$debug"
+        return 3
+    fi
+
+    # Add '%' brackets to the search string
+    local full_search_string="%${search_string}%"
+
+    # Perform the replacement
+    sed -i "s|$full_search_string|$replacement_string|g" "$script_file"
+    if [[ $? -eq 0 ]]; then
+        debug_print "Replacement succeeded: '$full_search_string' -> '$replacement_string' in $(basename "$script_file")" "$debug"
+        debug_end "$debug"
+        return 0
+    else
+        warn "Error: Replacement failed in file '$script_file'." >&2
+        debug_end "$debug"
+        return 4
+    fi
 }
 
 # -----------------------------------------------------------------------------
@@ -3330,68 +3871,144 @@ install_config_file() {
 # shellcheck disable=SC2329
 create_systemd_service() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="${1:-install}"  # Default to "install" if no action is provided
+    # Extract action and remaining arguments
+    local parse_result=""; parse_result=$(parse_action_and_args "$@")
+    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
+    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
 
-    local service_name
+    local source_root source_file service_name
     service_name=$(basename "$SERVICE_FILE")
+    source_root="$USER_HOME/$REPO_NAME"
+    source_path="$source_root/systemd/$service_name"
 
     if [[ "$action" == "install" ]]; then
         # Check if the systemd service already exists
         if ! systemctl list-unit-files --type=service | grep -q "$service_name"; then
             logI "Creating systemd service: $service_name."
         else
-            logI "Updating systemd service: $service_name."
-            exec_command "Disable $service_name" "systemctl disable $service_name" "$debug" || { logE "Failed to disable $service_name."; debug_end "$debug"; return 1; }
-            exec_command "Stop $service_name" "systemctl stop $service_name" "$debug" || { logE "Failed to stop $service_name."; debug_end "$debug"; return 1; }
+            logI "Updating systemd service: $service_name." "$debug"
+            # Stop and disable service
+            if [[ "$DRY_RUN" == "true" ]]; then
+                logD "Stop and disable $service_name (dry-run)."
+            else
+                exec_command "Disable systemd service" "sudo systemctl disable $service_name" "$debug" "$debug" || {
+                    logE "Failed to disable systemd service."
+                    debug_end "$debug"
+                    return 1
+                }
 
-            # Check if the service is masked and unmask if necessary
-            if systemctl is-enabled --quiet "$service_name"; then
-                exec_command "Unmask $service_name" "systemctl unmask $service_name" "$debug" || { logE "Failed to unmask $service_name."; debug_end "$debug"; return 1; }
+                exec_command "Stop systemd service" "sudo systemctl stop $service_name" "$debug" "$debug" || {
+                    logE "Failed to install controller."
+                    debug_end "$debug"
+                    return 1
+                }
+                # Check if the service is masked and unmask if necessary
+                if systemctl is-enabled "$service_name" 2>/dev/null | grep -q "^masked$"; then
+                    exec_command "Unmask systemd service" "sudo systemctl unmask $service_name" "$debug" "$debug" || {
+                        logE "Failed to unmask systemd service."
+                        debug_end "$debug"
+                        return 1
+                    }
+                fi
             fi
         fi
 
-        # Write the systemd service file
-        cat > "$SERVICE_FILE" <<EOF
-[Unit]
-Description=Automatically toggles WiFi Access Point based on network availability ($APP_NAME)
-After=multi-user.target
-Requires=network-online.target
+        if [[ ! -f "$source_path" ]]; then
+            warn "$source_path not found."
+            return 1
+        fi
 
-[Service]
-Type=simple
-ExecStart=${APP_PATH}
-StandardOutput=file:$APP_LOG_PATH/output.log
-StandardError=file:$APP_LOG_PATH/error.log
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-        # Create log directory if not exist and ensure correct permissions
-        exec_command "Create log target: $APP_LOG_PATH" "mkdir -p $APP_LOG_PATH" "$debug" || { logE "Failed to create log target."; debug_end "$debug"; return 1; }
-
-        # Change ownership/permissions on the log directory
-        exec_command "Change ownership on log target: $APP_LOG_PATH" "chown root:root \"$APP_LOG_PATH\"" "$debug" || { logE "Failed to change ownership on log target."; debug_end "$debug"; return 1; }
-        exec_command "Change permissions on log target: $APP_LOG_PATH" "chmod 755 \"$APP_LOG_PATH\"" "$debug" || { logE "Failed to change permissions on log target."; debug_end "$debug"; return 1; }
-
-        # Enable the systemd service
-        exec_command "Enable $service_name" "systemctl enable $service_name" "$debug" || { logE "Failed to enable $service_name."; debug_end "$debug"; return 1; }
-        exec_command "Reload systemd" "systemctl daemon-reload" "$debug" || { logE "Failed to reload systemd."; debug_end "$debug"; return 1; }
+        # Update template
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Installing $service_name (dry-run)."
+        else
+            debbug_print "Updating $source_path." "$debug"
+            replace_string_in_script "$source_path" "APP_NAME" "$APP_NAME" "$debug"
+            replace_string_in_script "$source_path" "APP_PATH" "$APP_PATH" "$debug"
+            replace_string_in_script "$source_path" "APP_LOG_PATH" "$APP_LOG_PATH" "$debug"
+            # Install the systemd service file
+            exec_command "Copy systemd file" "sudo cp -f $source_path $SERVICE_FILE" "$debug" || {
+                logE "Failed to copy systemd service."
+                debug_end "$debug"
+                return 1
+            }
+            # Change ownership on the systemd service|| {
+            exec_command "Change ownership on systemd file" "sudo chown root:root $SERVICE_FILE" "$debug" || {
+                logE "Failed to change permissions on systemd service."
+                debug_end "$debug"
+                return 1
+            }
+            # Change permissions on the systemd service file
+            exec_command "Change permissions on systemd file" "sudo chmod 755 $SERVICE_FILE" "$debug" || {
+                logE "Failed to change permissions on systemd service."
+                debug_end "$debug"
+                return 1
+            }
+            # Create log directory if not exist and ensure correct permissions
+            debug_print "Exec: (log path) sudo mkdir -p $APP_LOG_PATH" "$debug"
+            exec_command "Create log path" "sudo mkdir -p $APP_LOG_PATH" "$debug" || {
+                logE "Failed to create log path."
+                debug_end "$debug"
+                return 1
+            }
+            # Change ownership on the log directory
+            exec_command "Change ownership on log path" "sudo chown root:root $APP_LOG_PATH" "$debug" || {
+                logE "Failed to change ownership on log path."
+                debug_end "$debug"
+                return 1
+            }
+            # Change permissions on the log directory
+            exec_command "Change permissions on log path" "sudo chmod 755 $APP_LOG_PATH" "$debug" || {
+                logE "Failed to change permissions on log path."
+                debug_end "$debug"
+                return 1
+            }
+            # Enable the systemd service
+            exec_command "Enable systemd service" "sudo systemctl enable $service_name" "$debug" || {
+                logE "Failed to enable systemd service."
+                debug_end "$debug"
+                return 1
+            }
+            # Reload systemd
+            exec_command "Reload systemd" "sudo systemctl daemon-reload" "$debug" || {
+                logE "Failed to reload systemd."
+                debug_end "$debug"
+                return 1
+            }
+        fi
 
         logI "Systemd service $service_name created."
 
     elif [[ "$action" == "uninstall" ]]; then
         logI "Removing systemd service: $service_name."
 
-        # Disable and stop the systemd service
-        exec_command "Stop $service_name" "systemctl stop $service_name" "$debug" || { logE "Failed to stop $service_name."; debug_end "$debug"; return 1; }
-        exec_command "Disable $service_name" "systemctl disable $service_name" "$debug" || { logE "Failed to disable $service_name."; debug_end "$debug"; return 1; }
-
-        # Remove the service file
-        exec_command "Remove $service_name" "rm -f \"$SERVICE_FILE\"" "$debug" || { logE "Failed to remove $service_name."; debug_end "$debug"; return 1; }
-
-        # Remove the log directory
-        exec_command "Remove log target: $APP_LOG_PATH" "rm -rf \"$APP_LOG_PATH\"" "$debug" || { logE "Failed to remove log target."; debug_end "$debug"; return 1; }
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Remove $service_name (dry-run)."
+        else
+            # Disable and stop the systemd service
+            exec_command "Stop systemd service" "sudo systemctl stop $service_name" "$debug" || {
+                logE "Failed to istop systemd service."
+                debug_end "$debug"
+                return 1
+            }
+            exec_command "Disable systemd service" "sudo systemctl disable $service_name" "$debug" || {
+                logE "Failed to disable systemd service."
+                debug_end "$debug"
+                return 1
+            }
+            # Remove the service file
+            exec_command "Remove service file" "sudo rm -f $SERVICE_FILE" "$debug" || {
+                logE "Failed to remove service file."
+                debug_end "$debug"
+                return 1
+            }
+            # Remove the log directory
+            exec_command "Remove logs" "sudo rm -rf $APP_LOG_PATH" "$debug" || {
+                logE "Failed to remove logs."
+                debug_end "$debug"
+                return 1
+            }
+        fi
 
         logI "Systemd service $service_name removed."
     else
@@ -3425,10 +4042,15 @@ EOF
 # shellcheck disable=SC2329
 create_systemd_timer() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="${1:-install}"  # Default to "install" if no action is provided
+    # Extract action and remaining arguments
+    local parse_result=""; parse_result=$(parse_action_and_args "$@")
+    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
+    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
 
-    local timer_name
+    local timer_name timer_root timer_path
     timer_name=$(basename "$TIMER_FILE")
+    timer_root="$USER_HOME/$REPO_NAME"
+    timer_path="$timer_root/systemd/$timer_name"
 
     if [[ "$action" == "install" ]]; then
         # Check if the systemd timer already exists
@@ -3436,46 +4058,102 @@ create_systemd_timer() {
             logI "Creating systemd timer: $timer_name."
         else
             logI "Updating systemd timer: $timer_name."
-            exec_command "Disable $timer_name" "systemctl disable $timer_name" "$debug" || { logE "Failed to disable $timer_name."; debug_end "$debug"; return 1; }
-            exec_command "Stop $timer_name" "systemctl stop $timer_name" "$debug" || { logE "Failed to stop $timer_name."; debug_end "$debug"; return 1; }
+            if [[ "$DRY_RUN" == "true" ]]; then
+                logD "Stop and disable $timer_name (dry run)."
+            else
+                exec_command "Disable $timer_name" "sudo systemctl disable $timer_name" "$debug" || {
+                    logE "Failed to disable timer."
+                    debug_end "$debug"
+                    return 1
+                }
+                exec_command "Stop $timer_name" "sudo systemctl stop $timer_name" "$debug" || {
+                    logE "Failed to stop timer"
+                    debug_end "$debug"
+                    return 1
+                }
 
-            # Check if the timer is masked and unmask if necessary
-            if systemctl is-enabled --quiet "$timer_name"; then
-                exec_command "Unmask $timer_name" "systemctl unmask $timer_name" "$debug" || { logE "Failed to unmask $timer_name."; debug_end "$debug"; return 1; }
+                # Check if the timer is masked and unmask if necessary
+                if systemctl is-enabled --quiet "$timer_name"; then
+                    exec_command "Unmask $timer_name" "sudo systemctl unmask $timer_name" "$debug" || {
+                        logE "Failed to unmask timer."
+                        debug_end "$debug"
+                        return 1
+                    }
+                fi
             fi
         fi
 
-        # Write the systemd timer file
-        cat > "$TIMER_FILE" <<EOF
-[Unit]
-Description=Runs $APP_NAME every 2 minutes to check network status (appop)
-
-[Timer]
-OnBootSec=0min
-OnCalendar=*:0/2
-
-[Install]
-WantedBy=timers.target
-EOF
-
-        # Enable the timer
-        exec_command "Enable $timer_name" "systemctl enable $timer_name" "$debug" || { logE "Failed to enable $timer_name."; debug_end "$debug"; return 1; }
-        exec_command "Reload systemd" "systemctl daemon-reload" "$debug" || { logE "Failed to reload systemd."; debug_end "$debug"; return 1; }
-        exec_command "Start $timer_name" "systemctl start $timer_name" "$debug" || { logE "Failed to start $timer_name."; debug_end "$debug"; return 1; }
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Install $timer_name (dry run)."
+        else
+            debbug_print "Updating $source_path." "$debug"
+            replace_string_in_script "$source_path" "APP_NAME" "$APP_NAME" "$debug"
+            # replace_string_in_script "$source_path" "APP_PATH" "$APP_PATH" "$debug"
+            # Install the systemd service file
+            exec_command "Copy $timer_name" "sudo cp -f $timer_path $TIMER_FILE" || {
+                logE "Failed to copy timer."
+                debug_end "$debug"
+                return 1
+            }
+            # Change ownership on the systemd timer file
+            exec_command "Change ownership on timer file" "sudo chown root:root $TIMER_FILE" "$debug" || {
+                logE "Failed to change permissions on systemd service."
+                debug_end "$debug"
+                return 1
+            }
+            # Change permissions on the systemd timer file
+            exec_command "Change permissions on systemd file" "sudo chmod 755 $TIMER_FILE" "$debug" || {
+                logE "Failed to change permissions on systemd service."
+                debug_end "$debug"
+                return 1
+            }
+            # Enable the timer
+            exec_command "Enable $timer_name" "sudo systemctl enable $timer_name" "$debug" || {
+                logE "Failed to enable timer."
+                debug_end "$debug"
+                return 1
+            }
+            # Reload systemd
+            exec_command "Reload systemd" "sudo systemctl daemon-reload" "$debug" || {
+                logE "Failed to reload systemd."
+                debug_end "$debug"
+                return 1
+            }
+            exec_command "Start $timer_name" "sudo systemctl start $timer_name" "$debug" || {
+                logE "Failed to start timer."
+                debug_end "$debug"
+                return 1
+            }
+        fi
 
         logI "Systemd timer $timer_name created."
 
     elif [[ "$action" == "uninstall" ]]; then
         logI "Removing systemd timer: $timer_name."
 
-        # Disable and stop the systemd timer
-        exec_command "Stop $timer_name" "systemctl stop $timer_name" "$debug" || { logE "Failed to stop $timer_name."; debug_end "$debug"; return 1; }
-        exec_command "Disable $timer_name" "systemctl disable $timer_name" "$debug" || { logE "Failed to disable $timer_name."; debug_end "$debug"; return 1; }
+        if [[ "$DRY_RUN" == "true" ]]; then
+            logD "Stop and disable $timer_name (dry run)."
+        else
+            # Disable and stop the systemd timer
+            exec_command "Stop $timer_name" "sudo systemctl stop $timer_name" "$debug" || {
+                logE "Failed to stop timer."
+                debug_end "$debug"
+                return 1
+            }
+            exec_command "Disable $timer_name" "sudo systemctl disable $timer_name" "$debug" || {
+                logE "Failed to disable timer."
+                debug_end "$debug"
+                return 1
+            }
+            # Remove the timer file
+            exec_command "Remove $timer_name" "sudo rm -f $TIMER_FILE" "$debug" || {
+                logE "Failed to remove timer."
+                debug_end "$debug"
+                return 1
+            }
 
-        # Remove the timer file
-        exec_command "Remove $timer_name" "rm -f \"$TIMER_FILE\"" "$debug" || { logE "Failed to remove $timer_name."; debug_end "$debug"; return 1; }
-
-        logI "Systemd timer $timer_name removed."
+            logI "Systemd timer $timer_name removed."
+        fi
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
     fi
@@ -3503,12 +4181,17 @@ EOF
 # -----------------------------------------------------------------------------
 get_man_file_array() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    # Extract action and remaining arguments
+    local parse_result=""; parse_result=$(parse_action_and_args "$@")
+    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
+    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+
     local tree
     tree=$(fetch_tree)
 
     # Check if the repository tree is empty
     if [[ $(printf "%s" "$tree" | jq '.tree | length') -eq 0 ]]; then
-        logE "Failed to fetch repository tree. Check repository details or ensure it is public." "$debug"
+        logE "Failed to fetch repository tree. Check repository details or ensure it is public."
         debug_end "$debug"
         die 1 "Repository tree is empty or unavailable."
     fi
@@ -3521,14 +4204,15 @@ get_man_file_array() {
         '.tree[] | select(.type=="blob" and (.path | startswith($TARGET_DIR))) | .path')
 
     if [[ -z "$files" ]]; then
-        logE "No files found in the 'man/' directory." "$debug"
+        logE "No files found in the 'man/' directory."
         debug_end "$debug"
         die 1 "No man page files available."
     fi
 
     # Print the list of files to stderr
+    # TODO
     printf "%s\n" "$files" >&2
-    debug_print "Man page files retrieved: $files" "$debug"
+    debug_print "Man page files retrieved: $files"
     debug_end "$debug"
 }
 
@@ -3556,7 +4240,10 @@ get_man_file_array() {
 # shellcheck disable=SC2329
 install_man_pages() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="${1:-install}"  # Default to "install" if no action is provided
+    # Extract action and remaining arguments
+    local parse_result=""; parse_result=$(parse_action_and_args "$@")
+    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
+    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
 
     # Base directory for man pages
     local man_base_dir="/usr/share/man"
@@ -3565,13 +4252,11 @@ install_man_pages() {
         logI "Installing man pages."
 
         # Ensure the target directory exists
-        if [[ ! -d "$man_base_dir" ]]; then
-            exec_command "Create directory: $man_base_dir/" "mkdir -p '$man_base_dir'" "$debug" || {
-                logE "Failed to create $man_base_dir."
-                debug_end "$debug"
-                return 1
-            }
-        fi
+        [[ ! -d "$man_base_dir" ]] || {
+            logE "Target directory does not exist."
+            debug_end "$debug"
+            return 1
+        }
 
         # Loop through all man pages in the local directory
         for man_page in "$LOCAL_REPO_DIR/man/"*.*; do
@@ -3582,31 +4267,31 @@ install_man_pages() {
 
             # Ensure the target directory for the section exists
             if [[ ! -d "$target_dir" ]]; then
-                exec_command "Create directory: $target_dir/" "mkdir -p \"$target_dir\"" "$debug" || {
-                    logE "Failed to create $target_dir."
+                debug_print  "Exec: sudo mkdir -p $target_dir" "$debug"
+                exec_command "Create man section target direstory" "sudo mkdir -p $target_dir" "$debug" || {
+                    logE "Failed to create target directory."
                     debug_end "$debug"
                     return 1
                 }
             fi
-
             # Compress and install the man page
-            exec_command "Compress man page $man_page" "gzip -f \"$man_page\"" "$debug" || {
-                logE "Failed to compress $man_page."
+            exec_command "Compress man page" "gzip -f $man_page" "$debug" || {
+                logE "Failed to install controller."
                 debug_end "$debug"
                 return 1
             }
 
             local man_page_gz="${man_page}.gz"
-            exec_command "Install man page $man_page_gz" "cp \"$man_page_gz\" \"$target_dir/\"" "$debug" || {
-                logE "Failed to copy $man_page_gz to $target_dir."
+            exec_command "Install man page" "sudo cp $man_page_gz $target_dir" "$debug" || {
+                logE "Failed to install man page."
                 debug_end "$debug"
                 return 1
             }
         done
 
         # Update the man page database
-        exec_command "Update man page database" "mandb" "$debug" || {
-            logE "Failed to update man page database."
+        exec_command "Update man page database" "sudo mandb" "$debug" || {
+            logE "Failed to update mandb."
             debug_end "$debug"
             return 1
         }
@@ -3629,19 +4314,22 @@ install_man_pages() {
             target_dir="${man_base_dir}/man${section}"
 
             # Attempt to remove the man page and its compressed version
-            exec_command "Remove man page $man_page" "rm -f \"${target_dir}/${man_page}\" \"${target_dir}/${man_page}.gz\"" "$debug" || {
-                logE "Failed to remove man page $man_page."
+            exec_command "Remove man page" "sudo rm -f ${target_dir}/${man_page} ${target_dir}/${man_page}.gz" "$debug" || {
+                logE "Failed to remove man page."
+                debug_end "$debug"
+                return 1
             }
         done <<< "$files"
 
         # Optionally, clean up empty directories
-        exec_command "Remove empty directories" "find $man_base_dir/man* -type d -empty -delete" "$debug" || {
-            logE "Failed to remove empty directories."
+        exec_command "Clean up empty directories" "sudo find $man_base_dir/man* -type d -empty -delete" "$debug" || {
+            logE "Failed to cleanup empty directories."
+            debug_end "$debug"
+            return 1
         }
-
         # Update the man page database
-        exec_command "Update man page database" "mandb" "$debug" || {
-            logE "Failed to update man page database."
+        exec_command "Update mandb" "sudo mandb" "$debug" || {
+            logE "Failed to update mandb."
             debug_end "$debug"
             return 1
         }
@@ -3675,7 +4363,10 @@ install_man_pages() {
 # shellcheck disable=SC2329
 cleanup_files_in_directories() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="${1:-install}"  # Default to "install" if no action is provided
+    # Extract action and remaining arguments
+    local parse_result=""; parse_result=$(parse_action_and_args "$@")
+    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
+    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
 
     # Return immediately if action is "uninstall"
     if [[ "$action" == "uninstall" ]]; then
@@ -3684,10 +4375,18 @@ cleanup_files_in_directories() {
     fi
 
     local dest_root="$USER_HOME/$REPO_NAME"
-    logI "Deleting repository tree."
+    logI "Deleting local repository tree."
 
-    # Delete the repository directory
-    exec_command "Delete source tree" "rm -fr \"$dest_root\"" "$debug" || { logE "Failed to delete repository tree."; debug_end "$debug"; return 1; }
+    if [[ "$DRY_RUN" == "true" ]]; then
+        logD "Delete local repo files (dry-run)."
+    else
+        # Delete the repository directory
+        exec_command "Delete local repository" " sudo rm -fr $dest_root" "$debug" || {
+            logE "Failed to delete local install files."
+            debug_end "$debug"
+            return 1
+        }
+    fi
 
     debug_end "$debug"
     return 0
@@ -3733,14 +4432,14 @@ finish_script() {
     fi
 
     # Log completion message
-    logI "$action_message complete: $(repo_to_title_case "$REPO_NAME")."
+    logI "$action_message complete: $REPO_DISPLAY_NAME."
     debug_print "$action_message complete message logged." "$debug"
 
     # TODO: exec_new_shell() or call out instructions
 
     # Optionally clear the screen or display a message
     if [[ "${TERSE:-false}" == "true" ]]; then
-        printf "%s complete: %s.\n" "$action_message" "$(repo_to_title_case "$REPO_NAME")"
+        printf "%s complete: %s.\n" "$action_message" "$REPO_DISPLAY_NAME"
     fi
 
     debug_end "$debug"
@@ -3772,7 +4471,10 @@ finish_script() {
 # shellcheck disable=SC2329
 install_ap_popup() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="${1:-install}"  # Default to "install" if no action is provided
+    # Extract action and remaining arguments
+    local parse_result=""; parse_result=$(parse_action_and_args "$@")
+    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
+    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
 
     # Define the group of functions to install/uninstall
     local install_group=(
@@ -3806,24 +4508,24 @@ install_ap_popup() {
 
     # Iterate over the group of functions and call them with the action and debug flag
     for func in "${group_to_execute[@]}"; do
-        logI "Running $func with action '$action'" "$debug"
+        debug_print "Running $func() with action: '$action'" "$debug"
 
         # Call the function with action and debug flag
-        $func "$action" "$debug"
+        "$func" "$action" "$debug"
         local status=$?
 
         # Check if the function failed
         if [[ $status -ne 0 ]]; then
-            logE "$func failed with status $status" "$debug"
+            logE "$func failed with status $status"
             debug_end "$debug"
             return 1
         else
-            logI "$func succeeded." "$debug"
+            debug_print "$func succeeded." "$debug"
         fi
     done
 
     # cleanup files (returns early on uninstall)
-    cleanup_files_in_directories "$action" "$debug"
+    # TODO cleanup_files_in_directories "$action" "$debug"
 
     # Finish the script
     finish_script "$action" "$debug"
@@ -3832,13 +4534,60 @@ install_ap_popup() {
     return 0
 }
 
+# -----------------------------------------------------------------------------
+# @brief Parses and separates an action (install/uninstall) and additional arguments.
+# @details This function iterates over the provided arguments to identify the
+#          action (either "install" or "uninstall") and separates any remaining
+#          arguments into a filtered list.
+#
+# @param $@ The list of arguments to parse.
+#
+# @global None.
+#
+# @throws None.
+#
+# @return Outputs the action as the first part followed by a pipe (`|`) and the
+#         remaining arguments (if any).
+#
+# @example
+# parse_action_and_args install arg1 arg2
+# # Output: install|arg1 arg2
+#
+# parse_action_and_args uninstall
+# # Output: uninstall|
+# -----------------------------------------------------------------------------
+parse_action_and_args() {
+    local debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    local action=""  # To capture the action ("install" or "uninstall").
+    local args=()    # Array to hold the filtered (non-action) arguments.
+
+    # Iterate over the argument list.
+    for arg in "$@"; do
+        case "$arg" in
+            install|uninstall)
+                action="$arg"  # Set the action if "install" or "uninstall".
+                ;;
+            *)
+                args+=("$arg")  # Add non-matching arguments to the args array.
+                ;;
+        esac
+    done
+
+    # Output the action and the remaining arguments as separate values.
+    printf "%s|" "$action"       # Action as the first part (e.g., "install|").
+    printf "%q " "${args[@]}"    # Filtered arguments as the second part.
+    printf "\n"                  # Ensure a newline at the end of output.
+
+    debug_end "$debug"
+}
+
 ############
 ### Main Functions
 ############
 
 _main() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="$1"
 
     # Check and set up the environment
     enforce_sudo "$debug"              # Ensure proper privileges for script execution
@@ -3855,8 +4604,15 @@ _main() {
     print_system "$debug"              # Log system information
     print_version "$debug"             # Log the script version
 
-    # install_ap_popup "$action" "$debug"
-    get_man_file_array
+    # Run installer steps
+    #install_ap_popup "install" "debug" # TODO DEBUG
+    # Create log directory if not exist and ensure correct permissions
+    debug_print "Exec: (log path) sudo mkdir -p $APP_LOG_PATH" "$debug"
+    exec_command "Create log path" "sudo mkdir -p $APP_LOG_PATH" "$debug" || {
+        logE "Failed to create log path."
+        debug_end "$debug"
+        return 1
+    }
 
     debug_end "$debug"
     return 0
@@ -3873,6 +4629,14 @@ _main() {
 # @return Returns the status code from `_main`.
 # -----------------------------------------------------------------------------
 main() { _main "$@"; return "$?"; }
+
+# -----------------------------------------------------------------------------
+# @brief Traps the `EXIT` signal to invoke the `egress` function.
+# @details Ensures the `egress` function is called automatically when the shell
+#          exits. This enables proper session cleanup and displays session
+#          statistics to the user.
+# -----------------------------------------------------------------------------
+trap egress EXIT
 
 debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 main "$@" "$debug"
