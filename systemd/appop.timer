@@ -1,0 +1,10 @@
+[Unit]
+Description=Starts application every 2 minutes to check network status (%APP_NAME%)
+
+[Timer]
+OnUnitActiveSec=2m
+OnBootSec=2m
+Unit=%APP_NAME%.service
+
+[Install]
+WantedBy=timers.target
