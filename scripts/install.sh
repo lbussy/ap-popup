@@ -154,9 +154,9 @@ readonly GIT_DIRS=("man" "scripts" "conf" "systemd")
 # -----------------------------------------------------------------------------
 # @var MAN_BASE_DIR
 # @brief Base directory for man pages.
-# @details This variable defines the root directory where man pages will be 
+# @details This variable defines the root directory where man pages will be
 #          installed or removed. By default, it is set to `/usr/share/man`.
-#          It can be overridden by setting the `MAN_BASE_DIR` environment 
+#          It can be overridden by setting the `MAN_BASE_DIR` environment
 #          variable before running the script.
 # -----------------------------------------------------------------------------
 readonly MAN_BASE_DIR="${MAN_BASE_DIR:-/usr/share/man}"
@@ -1545,15 +1545,15 @@ enforce_sudo() {
         elif [[ "$EUID" -eq 0 && -n "$SUDO_USER" ]]; then
             debug_print "Script run from a root shell. Exiting." "$debug"
             die 1 "This script should not be run from a root shell." \
-                  "Run it with 'sudo $THIS_SCRIPT' as a regular user."
+                "Run it with 'sudo $THIS_SCRIPT' as a regular user."
         elif [[ "$EUID" -eq 0 ]]; then
             debug_print "Script run as root. Exiting." "$debug"
             die 1 "This script should not be run as the root user." \
-                  "Run it with 'sudo $THIS_SCRIPT' as a regular user."
+                "Run it with 'sudo $THIS_SCRIPT' as a regular user."
         else
             debug_print "Script not run with sudo. Exiting." "$debug"
             die 1 "This script requires 'sudo' privileges." \
-                  "Please re-run it using 'sudo $THIS_SCRIPT'."
+                "Please re-run it using 'sudo $THIS_SCRIPT'."
         fi
     fi
 
@@ -1771,7 +1771,7 @@ check_sh_ver() {
 
         # Compare the current Bash version with the required version
         if (( BASH_VERSINFO[0] < required_major ||
-              (BASH_VERSINFO[0] == required_major && BASH_VERSINFO[1] < required_minor) )); then
+            (BASH_VERSINFO[0] == required_major && BASH_VERSINFO[1] < required_minor) )); then
                     debug_end "$debug"
             die 1 "This script requires Bash version $required_version or newer."
         fi
@@ -2930,7 +2930,7 @@ download_file() {
     else
         debug_print "Exec: mkdir -p $dest_dir" "$debug"
         mkdir -p "$dest_dir"
-    fi 
+    fi
 
     local file_name
     file_name=$(basename "$file_path")
@@ -2946,7 +2946,7 @@ download_file() {
             warn "Failed to download file: $file_path to $dest_dir/$file_name"
             return 1
         }
-    fi 
+    fi
 
     # Sanitize the filename
     local dest_file="$dest_dir/$file_name"
@@ -3013,7 +3013,7 @@ fetch_tree() {
 download_files_in_directories() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local dest_root="$USER_HOME/$REPO_NAME"
-    logI "Fetching repository tree."
+    debug_print "Fetching repository tree." "$debug"
     local tree=$(fetch_tree)
 
     if [[ $(printf "%s" "$tree" | jq '.tree | length') -eq 0 ]]; then
@@ -3021,7 +3021,7 @@ download_files_in_directories() {
     fi
 
     for dir in "${GIT_DIRS[@]}"; do
-        logI "Processing directory: $dir"
+        debug_print "Processing directory: $dir" "$debug"
 
         local files
         files=$(printf "%s" "$tree" | jq -r --arg TARGET_DIR "$dir/" \
@@ -3037,15 +3037,15 @@ download_files_in_directories() {
         mkdir -p "$dest_dir"
 
         printf "%s\n" "$files" | while read -r file; do
-            logI "Downloading: $file"
+            debug_print "Downloading: $file" "$debug"
             download_file "$file" "$dest_dir" "$debug"
         done
 
-        logI "Files from $dir downloaded to: $dest_dir"
+        debug_print "Files from $dir downloaded to: $dest_dir" "$debug"
     done
 
     debug_end "$debug"
-    logI "Files saved in: $dest_root"
+    logI "Install files saved in: $dest_root"
 }
 
 ############
@@ -3932,7 +3932,7 @@ create_systemd_service() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Installing $service_name (dry-run)."
         else
-            debbug_print "Updating $source_path." "$debug"
+            debug_print "Updating $source_path." "$debug"
             replace_string_in_script "$source_path" "APP_NAME" "$APP_NAME" "$debug"
             replace_string_in_script "$source_path" "APP_PATH" "$APP_PATH" "$debug"
             replace_string_in_script "$source_path" "APP_LOG_PATH" "$APP_LOG_PATH" "$debug"
@@ -3949,7 +3949,7 @@ create_systemd_service() {
                 return 1
             }
             # Change permissions on the systemd service file
-            exec_command "Change permissions on systemd file" "sudo chmod 755 $SERVICE_FILE" "$debug" || {
+            exec_command "Change permissions on systemd file" "sudo chmod 644 $SERVICE_FILE" "$debug" || {
                 logE "Failed to change permissions on systemd service."
                 debug_end "$debug"
                 return 1
@@ -3995,29 +3995,54 @@ create_systemd_service() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Remove $service_name (dry-run)."
         else
-            # Disable and stop the systemd service
-            exec_command "Stop systemd service" "sudo systemctl stop $service_name" "$debug" || {
-                logE "Failed to istop systemd service."
-                debug_end "$debug"
-                return 1
-            }
-            exec_command "Disable systemd service" "sudo systemctl disable $service_name" "$debug" || {
-                logE "Failed to disable systemd service."
-                debug_end "$debug"
-                return 1
-            }
-            # Remove the service file
-            exec_command "Remove service file" "sudo rm -f $SERVICE_FILE" "$debug" || {
-                logE "Failed to remove service file."
-                debug_end "$debug"
-                return 1
-            }
-            # Remove the log directory
-            exec_command "Remove logs" "sudo rm -rf $APP_LOG_PATH" "$debug" || {
-                logE "Failed to remove logs."
-                debug_end "$debug"
-                return 1
-            }
+            # Check if the service unit file exists before proceeding
+            if systemctl list-unit-files | grep -q "^$service_name"; then
+                # Check if the service is active before attempting to stop it
+                if systemctl is-active --quiet "$service_name"; then
+                    exec_command "Stop systemd service" "sudo systemctl stop $service_name" "$debug" || {
+                        logE "Failed to stop systemd service $service_name."
+                        debug_end "$debug"
+                        return 1
+                    }
+                else
+                    debug_print "Service $service_name is not active. Skipping stop." "$debug"
+                fi
+
+                # Check if the service is enabled before attempting to disable it
+                if systemctl is-enabled --quiet "$service_name"; then
+                    exec_command "Disable systemd service" "sudo systemctl disable $service_name" "$debug" || {
+                        logE "Failed to disable systemd service $service_name."
+                        debug_end "$debug"
+                        return 1
+                    }
+                else
+                    debug_print "Service $service_name is not enabled. Skipping disable." "$debug"
+                fi
+            else
+                debug_print "Service unit file for $service_name does not exist. Skipping stop and disable." "$debug"
+            fi
+
+            # Check if the service file exists before attempting to delete it
+            if [[ -f "$SERVICE_FILE" ]]; then
+                exec_command "Remove service file" "sudo rm -f $SERVICE_FILE" "$debug" || {
+                    logE "Failed to remove service file $SERVICE_FILE."
+                    debug_end "$debug"
+                    return 1
+                }
+            else
+                debug_print "Service file $SERVICE_FILE does not exist. Skipping removal." "$debug"
+            fi
+
+            # Check if the log directory exists before attempting to delete it
+            if [[ -d "$APP_LOG_PATH" ]]; then
+                exec_command "Remove logs" "sudo rm -rf $APP_LOG_PATH" "$debug" || {
+                    logE "Failed to remove logs in $APP_LOG_PATH."
+                    debug_end "$debug"
+                    return 1
+                }
+            else
+                debug_print "Log directory $APP_LOG_PATH does not exist. Skipping removal." "$debug"
+            fi
         fi
 
         logI "Systemd service $service_name removed."
@@ -4096,9 +4121,8 @@ create_systemd_timer() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Install $timer_name (dry run)."
         else
-            debbug_print "Updating $source_path." "$debug"
+            debug_print "Updating $source_path." "$debug"
             replace_string_in_script "$source_path" "APP_NAME" "$APP_NAME" "$debug"
-            # replace_string_in_script "$source_path" "APP_PATH" "$APP_PATH" "$debug"
             # Install the systemd service file
             exec_command "Copy $timer_name" "sudo cp -f $timer_path $TIMER_FILE" || {
                 logE "Failed to copy timer."
@@ -4112,7 +4136,7 @@ create_systemd_timer() {
                 return 1
             }
             # Change permissions on the systemd timer file
-            exec_command "Change permissions on systemd file" "sudo chmod 755 $TIMER_FILE" "$debug" || {
+            exec_command "Change permissions on systemd file" "sudo chmod 644 $TIMER_FILE" "$debug" || {
                 logE "Failed to change permissions on systemd service."
                 debug_end "$debug"
                 return 1
@@ -4144,23 +4168,43 @@ create_systemd_timer() {
         if [[ "$DRY_RUN" == "true" ]]; then
             logD "Stop and disable $timer_name (dry run)."
         else
-            # Disable and stop the systemd timer
-            exec_command "Stop $timer_name" "sudo systemctl stop $timer_name" "$debug" || {
-                logE "Failed to stop timer."
-                debug_end "$debug"
-                return 1
-            }
-            exec_command "Disable $timer_name" "sudo systemctl disable $timer_name" "$debug" || {
-                logE "Failed to disable timer."
-                debug_end "$debug"
-                return 1
-            }
-            # Remove the timer file
-            exec_command "Remove $timer_name" "sudo rm -f $TIMER_FILE" "$debug" || {
-                logE "Failed to remove timer."
-                debug_end "$debug"
-                return 1
-            }
+            # Check if the timer unit file exists before proceeding
+            if systemctl list-unit-files | grep -q "^$timer_name"; then
+                # Check if the timer is active before attempting to stop it
+                if systemctl is-active --quiet "$timer_name"; then
+                    exec_command "Stop $timer_name" "sudo systemctl stop $timer_name" "$debug" || {
+                        logE "Failed to stop timer $timer_name."
+                        debug_end "$debug"
+                        return 1
+                    }
+                else
+                    debug_print "Timer $timer_name is not active. Skipping stop." "$debug"
+                fi
+
+                # Check if the timer is enabled before attempting to disable it
+                if systemctl is-enabled --quiet "$timer_name"; then
+                    exec_command "Disable $timer_name" "sudo systemctl disable $timer_name" "$debug" || {
+                        logE "Failed to disable timer $timer_name."
+                        debug_end "$debug"
+                        return 1
+                    }
+                else
+                    debug_print "Timer $timer_name is not enabled. Skipping disable." "$debug"
+                fi
+            else
+                debug_print "Timer unit file for $timer_name does not exist. Skipping stop and disable." "$debug"
+            fi
+
+            # Check if the timer file exists before attempting to delete it
+            if [[ -f "$TIMER_FILE" ]]; then
+                exec_command "Remove $timer_name" "sudo rm -f $TIMER_FILE" "$debug" || {
+                    logE "Failed to remove timer file $TIMER_FILE."
+                    debug_end "$debug"
+                    return 1
+                }
+            else
+                debug_print "Timer file $TIMER_FILE does not exist. Skipping removal." "$debug"
+            fi
 
             logI "Systemd timer $timer_name removed."
         fi
@@ -4191,12 +4235,7 @@ create_systemd_timer() {
 # -----------------------------------------------------------------------------
 get_man_file_array() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    # Extract action and remaining arguments
-    local parse_result=""; parse_result=$(parse_action_and_args "$@")
-    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
-    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
-
-    local tree
+    local tree dir="man"
     tree=$(fetch_tree)
 
     # Check if the repository tree is empty
@@ -4206,18 +4245,17 @@ get_man_file_array() {
         die 1 "Repository tree is empty or unavailable."
     fi
 
-    local dir="man"
-    local files
+    debug_print "Processing directory: $dir" "$debug"
 
     # Extract basenames of file paths under the "man/" directory
+    local files
     files=$(printf "%s" "$tree" | jq -r --arg TARGET_DIR "$dir/" \
         '.tree[] | select(.type=="blob" and (.path | startswith($TARGET_DIR))) | .path' | xargs -n 1 basename)
 
-    if [[ -z "$files" ]]; then
-        logE "No files found in the 'man/' directory."
-        debug_end "$debug"
-        die 1 "No man page files available."
-    fi
+    debug_print "Extracted files: \n$files\n" "$debug"
+
+    # Use echo to return the extracted files to the caller
+    printf "%s\n" "$files"
 
     debug_end "$debug"
 }
@@ -4246,111 +4284,106 @@ get_man_file_array() {
 # shellcheck disable=SC2329
 install_man_pages() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    
     # Extract action and remaining arguments
     local parse_result=""; parse_result=$(parse_action_and_args "$@")
     local action=""; action="${parse_result%%|*}"   # $action = before the '|'
     local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
 
-    local man_base_dir="/usr/share/man"  # Adjust as necessary for your system
+    local man_base_dir="/usr/share/man"
     local -a man_files
-    IFS=$'\n' read -r -d '' -a man_files < <(get_man_file_array "$debug" && printf '\0')
+    local raw_files
+
+    # Fetch the raw files from get_man_file_array
+    raw_files=$(get_man_file_array "$debug")
+    debug_print "Raw files output: \n$raw_files" "$debug"
+
+    # Populate the array from raw files
+    IFS=$'\n' read -r -d '' -a man_files < <(printf "%s\0" "$raw_files")
+    debug_print "Populated man_files array: \n${man_files[*]}" "$debug"
+
+    # Guard clause for empty array
+    if [[ ${#man_files[@]} -eq 0 ]]; then
+        logE "No man files were found for installation."
+        debug_end "$debug"
+        return 1
+    fi
 
     if [[ "$action" == "install" ]]; then
         logI "Installing man pages."
-
         for man_file in "${man_files[@]}"; do
+            debug_print "Processing $man_file" "$debug"
             [[ -n "$man_file" ]] || continue  # Skip empty entries
 
             # Extract section and filename
             local section="${man_file##*.}"
-            local filename="${man_file}"
+            local filename="$man_file"
             local target_dir="${man_base_dir}/man${section}"
             local source_file="$USER_HOME/$REPO_NAME/man/$filename"
             local compressed_file="${source_file}.gz"
 
             # Verify the source file exists
+            debug_print "Checking source file $source_file" "$debug"
             if [[ ! -f "$source_file" ]]; then
-                logE "Manual page $filename not found in $source_file"
+                logE "Manual page $filename not found at $source_file"
                 continue
             fi
 
             # Create target directory if it doesn't exist
-            if [[ ! -d "$target_dir" ]]; then
-                debug_print "Creating directory $target_dir" "$debug"
-                exec_command "Create man directory" "sudo mkdir -p $target_dir" "$debug" || {
-                    logE "Failed to create $target_dir"
-                    continue
-                }
-            fi
+            debug_print "Creating directory $target_dir if it doesn't exist" "$debug"
+            [[ -d "$target_dir" ]] || sudo mkdir -p "$target_dir"
 
-            # Compress the file if not already compressed
-            if [[ ! -f "$compressed_file" ]]; then
+            # Verify the source file exists (compressed or uncompressed)
+            if [[ -f "$compressed_file" ]]; then
+                debug_print "Compressed file $compressed_file already exists. Using it." "$debug"
+            elif [[ -f "$source_file" ]]; then
                 debug_print "Compressing $source_file" "$debug"
-                exec_command "Compress manual page" "gzip -f $source_file" "$debug" || {
+                gzip -f "$source_file" || {
                     logE "Failed to compress $source_file"
                     continue
                 }
+            else
+                logE "Manual page $filename not found in either $source_file or $compressed_file"
+                continue
             fi
 
-            # Copy compressed file to the target directory
+            # Copy the compressed file to the target directory
             debug_print "Copying $compressed_file to $target_dir" "$debug"
-            exec_command "Copy manual page" "sudo cp $compressed_file $target_dir" "$debug" || {
+            sudo cp "$compressed_file" "$target_dir" || {
                 logE "Failed to copy $compressed_file to $target_dir"
                 continue
             }
+
         done
-
-        # Update the man page database
-        debug_print "Running sudo mandb to update manual page database" "$debug"
-        exec_command "Update man page database" "sudo mandb" "$debug" || {
-            logE "Failed to update manual page database."
-            debug_end "$debug"
-            return 1
-        }
-
-        logI "Man pages installed successfully."
-
     elif [[ "$action" == "uninstall" ]]; then
         logI "Uninstalling man pages."
         for man_file in "${man_files[@]}"; do
-            [[ -n "$man_file" ]] || continue  # Skip empty entries
-
-            # Extract section and filename
+            debug_print "Removing $man_file" "$debug"
             local section="${man_file##*.}"
-            local filename="${man_file}"
+            local filename="$man_file"
             local target_dir="${man_base_dir}/man${section}"
-
-            # Remove the manual pages
-            for ext in "" ".gz" ".gz.gz"; do
-                local target_file="$target_dir/${filename}${ext}"
-                if [[ -f "$target_file" ]]; then
-                    debug_print "Removing $target_file" "$debug"
-                    exec_command "Remove manual page" "sudo rm -f $target_file" "$debug" || {
-                        logE "Failed to remove $target_file"
-                    }
-                fi
-            done
+            local compressed_file="${target_dir}/${filename}.gz"
+            
+            if [[ -f "$compressed_file" ]]; then
+                sudo rm "$compressed_file" || {
+                    logE "Failed to remove $compressed_file"
+                    continue
+                }
+                debug_print "Removed $compressed_file" "$debug"
+            fi
         done
-
-        # Clean up empty directories
-        debug_print "Cleaning up empty directories in $man_base_dir" "$debug"
-        exec_command "Remove empty directories" "sudo find $man_base_dir -type d -empty -delete" "$debug" || {
-            logW "Failed to remove empty directories in $man_base_dir."
-        }
-
-        # Update the man page database
-        debug_print "Running sudo mandb to update manual page database" "$debug"
-        exec_command "Update man page database" "sudo mandb" "$debug" || {
-            logE "Failed to update manual page database."
-            debug_end "$debug"
-            return 1
-        }
-
-        logI "All man pages uninstalled successfully."
     else
         die 1 "Invalid action. Use 'install' or 'uninstall'."
     fi
+
+    # Update the man database
+    exec_command "Run mandb" "sudo mandb > /dev/null 2>&1" "$debug" || {
+        logE "Failed to refresh mandb."
+        debug_end "$debug"
+        return 1
+    }
+
+    # Final success log
+    logI "Man pages ${action}ed successfully."
 
     debug_end "$debug"
 }
@@ -4379,12 +4412,6 @@ cleanup_files_in_directories() {
     local parse_result=""; parse_result=$(parse_action_and_args "$@")
     local action=""; action="${parse_result%%|*}"   # $action = before the '|'
     local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
-
-    # Return immediately if action is "uninstall"
-    if [[ "$action" == "uninstall" ]]; then
-        debug_end "$debug"
-        return 0
-    fi
 
     local dest_root="$USER_HOME/$REPO_NAME"
     logI "Deleting local repository tree."
@@ -4490,60 +4517,87 @@ install_ap_popup() {
 
     # Define the group of functions to install/uninstall
     local install_group=(
-        # "check_network_manager"
-        # "check_hostapd_status"
-        # "handle_apt_packages"
-        # "download_files_in_directories"
-        # "install_controller_script"
-        # "install_application_script"
-        # "install_config_file"
-        # "create_systemd_service"
-        # "create_systemd_timer"
+        "check_network_manager"
+        "check_hostapd_status"
+        "handle_apt_packages"
+        "download_files_in_directories"
+        "install_controller_script"
+        "install_application_script"
+        "install_config_file"
+        "create_systemd_service"
+        "create_systemd_timer"
         "install_man_pages"
     )
 
-    # TODO:
-    # - Validate man pages
-    # - Review/fix systemd service files
-    # - Handle install/uninstall
-    # - Cleanup files in directories
-
-    # Validate the action argument
-    if [[ "$action" != "install" && "$action" != "uninstall" ]]; then
-        die 1 "Invalid action. Use 'install' or 'uninstall'." "$debug"
-    fi
-
-    # Determine the order of function execution (reverse for uninstall)
-    local group_to_execute=()
-    if [[ "$action" == "install" ]]; then
-        group_to_execute=("${install_group[@]}")
-    else
-        mapfile -t group_to_execute < <(printf "%s\n" "${install_group[@]}" | tac)  # Reverse the array
-    fi
+    local skip_on_uninstall=(
+        "check_network_manager"
+        "check_hostapd_status"
+        "handle_apt_packages"
+        "download_files_in_directories"
+    )
 
     # Start the script
     start_script "$action" "$debug"
 
     # Iterate over the group of functions and call them with the action and debug flag
-    for func in "${group_to_execute[@]}"; do
-        debug_print "Running $func() with action: '$action'" "$debug"
+    if [[ "$action" == "install" ]]; then
+        local group_to_execute=()
+        group_to_execute=("${install_group[@]}")
 
-        # Call the function with action and debug flag
-        "$func" "$action" "$debug"
-        local status=$?
+        for func in "${group_to_execute[@]}"; do
+            debug_print "Running $func() with action: '$action'" "$debug"
+            # Call the function with action and debug flag
+            "$func" "$action" "$debug"
+            local status=$?
 
-        # Check if the function failed
-        if [[ $status -ne 0 ]]; then
-            logE "$func failed with status $status"
-            debug_end "$debug"
-            return 1
-        else
-            debug_print "$func succeeded." "$debug"
-        fi
-    done
+            # Check if the function failed
+            if [[ $status -ne 0 ]]; then
+                logE "$func failed with status $status"
+                debug_end "$debug"
+                return 1
+            else
+                debug_print "$func succeeded." "$debug"
+            fi
+        done
+    elif [[ "$action" == "uninstall" ]]; then
+        # Reverse the array for uninstall
+        local group_to_execute=()
+        mapfile -t group_to_execute < <(printf "%s\n" "${install_group[@]}" | tac)
 
-    # cleanup files (returns early on uninstall)
-    # TODO cleanup_files_in_directories "$action" "$debug"
+        for func in "${group_to_execute[@]}"; do
+            # Skip functions listed in skip_on_uninstall
+            local skip=false
+            for skip_func in "${skip_on_uninstall[@]}"; do
+                if [[ "$func" == "$skip_func" ]]; then
+                    skip=true
+                    break
+                fi
+            done
+
+            if [[ "$skip" == true ]]; then
+                debug_print "Skipping $func during uninstall." "$debug"
+                continue
+            fi
+
+            # Call the function with action and debug flag
+            "$func" "$action" "$debug"
+            local status=$?
+
+            # Check if the function failed
+            if [[ $status -ne 0 ]]; then
+                logE "$func failed with status $status"
+                debug_end "$debug"
+                return 1
+            else
+                debug_print "$func succeeded." "$debug"
+            fi
+        done
+    else
+        die 1 "Invalid action. Use 'install' or 'uninstall'."
+    fi
+
+    # File cleanup
+    cleanup_files_in_directories "$debug"
 
     # Finish the script
     finish_script "$action" "$debug"
@@ -4631,7 +4685,7 @@ _main() {
     print_version "$debug"             # Log the script version
 
     # Run installer steps
-    install_ap_popup "$action" "$debug" # TODO DEBUG
+    install_ap_popup "$action" "$debug"
 
     debug_end "$debug"
     return 0
