@@ -59,6 +59,59 @@ set +o noclobber
 ############
 
 # -----------------------------------------------------------------------------
+# @details This script uses configuration variables for setting up the Access 
+#          Point. Defaults are declared below and can be overridden by sourcing 
+#          a configuration file (e.g., /etc/appop.conf).
+#
+# @section Default Variables
+# @var WIFI_INTERFACE
+# @brief WiFi interface used by the Access Point.
+# @details This interface will be configured for the Access Point functionality.
+# @default "wlan0"
+#
+# @var AP_PROFILE_NAME
+# @brief Access Point profile name.
+# @details The profile name for the Access Point configuration.
+# @default "AP_Pop-Up"
+#
+# @var AP_SSID
+# @brief Access Point SSID.
+# @details The SSID (network name) broadcasted by the Access Point.
+# @default "AP_Pop-Up"
+#
+# @var AP_PASSWORD
+# @brief Access Point password.
+# @details The password required to connect to the Access Point. Ensure this 
+#          value meets your security requirements.
+# @default "1234567890"
+#
+# @var AP_CIDR
+# @brief Access Point CIDR.
+# @details The CIDR block used by the Access Point for assigning IP addresses.
+# @default "192.168.50.5/16"
+#
+# @var AP_GATEWAY
+# @brief Access Point Gateway.
+# @details The gateway address for the Access Point.
+# @default "192.168.50.254"
+#
+# @var ENABLE_WIFI
+# @brief Enable WiFi automatically if disabled.
+# @details Determines whether WiFi should be enabled automatically.
+# @default "y"
+#
+# @note To override these values, source the configuration file at runtime:
+#       source /etc/appop.conf
+# -----------------------------------------------------------------------------
+declare WIFI_INTERFACE="wlan0"             # WiFi interface used by the Access Point
+declare AP_PROFILE_NAME="AP_Pop-Up"        # Access Point profile name
+declare AP_SSID="AP_Pop-Up"                # Access Point SSID
+declare AP_PASSWORD="1234567890"           # Access Point password
+declare AP_CIDR="192.168.50.5/16"          # Access Point CIDR
+declare AP_GATEWAY="192.168.50.254"        # Access Point Gateway
+declare ENABLE_WIFI="y"                    # Enable WiFi automatically if disabled
+
+# -----------------------------------------------------------------------------
 # @var REQUIRE_SUDO
 # @brief Indicates whether root privileges are required to run the script.
 # @details This variable determines if the script requires execution with root
@@ -114,39 +167,7 @@ if [[ -z "${THIS_SCRIPT:-}" ]]; then
     fi
 fi
 
-# -----------------------------------------------------------------------------
-# @brief Project metadata constants used throughout the script.
-# @details These variables provide metadata about the script, including
-#          ownership, versioning, project details, and GitHub URLs. They are
-#          initialized with default values here and may be dynamically set
-#          during execution to reflect the project's context.
-#
-# @vars
-# - @var REPO_ORG The organization or owner of the repository (default:
-#                 "lbussy").
-# - @var REPO_NAME The name of the repository (default: "bash-template").
-# - @var REPO_BRANCH The current Git branch name (default: "main").
-# - @var GIT_TAG The current Git tag (default: "0.0.1").
-# - @var SEM_VER The semantic version of the project (default: "0.0.1").
-# - @var LOCAL_REPO_DIR The local source directory path (default: unset).
-# - @var LOCAL_WWW_DIR The local web directory path (default: unset).
-# - @var LOCAL_SCRIPTS_DIR The local scripts directory path (default: unset).
-# - @var GIT_RAW The base URL for accessing raw GitHub content (default:
-#                "https://raw.githubusercontent.com/$REPO_ORG/$REPO_NAME").
-# - @var GIT_API The base URL for the GitHub API for this repository (default:
-#                "https://api.github.com/repos/$REPO_ORG/$REPO_NAME").
-# - @var GIT_CLONE The clone URL for the GitHub repository (default:
-#                "https://api.github.com/repos/$REPO_ORG/$REPO_NAME").
-#
-# @example
-# echo "Repository: $REPO_ORG/$REPO_NAME"
-# echo "Branch: $REPO_BRANCH, Tag: $GIT_TAG, Version: $SEM_VER"
-# echo "Source Directory: ${LOCAL_REPO_DIR:-Not Set}"
-# echo "WWW Directory: ${LOCAL_WWW_DIR:-Not Set}"
-# echo "Scripts Directory: ${LOCAL_SCRIPTS_DIR:-Not Set}"
-# echo "Raw URL: $GIT_RAW"
-# echo "API URL: $GIT_API"
-# -----------------------------------------------------------------------------
+# TODO
 declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="${REPO_NAME:-ap-popup}"
 declare REPO_DISPLAY_NAME="${REPO_DISPLAY_NAME:-AP Pop-Up}"
@@ -155,6 +176,7 @@ declare GIT_TAG="${GIT_TAG:-1.0.0}"
 declare SEM_VER="${SEM_VER:-${GIT_TAG}-${REPO_BRANCH}}"
 declare GIT_RAW="${GIT_RAW:-"https://raw.githubusercontent.com/$REPO_ORG/$REPO_NAME"}"
 readonly APP_NAME="${APP_NAME:-appop}"
+readonly CONFIG_FILE="/etc/$APP_NAME.conf"
 
 # -----------------------------------------------------------------------------
 # Declare Menu Variables
@@ -2033,13 +2055,14 @@ display_menu() {
 
     local choice
     local i=1
+    local menu_array=("${!1}")  # Array of menu keys to display
 
     # Display the menu header
     printf "%s\n\n" "$MENU_HEADER"
     printf "Please select an option:\n\n"
 
     # Display the menu items
-    for func in "${MAIN_MENU[@]}"; do
+    for func in "${menu_array[@]}"; do
         # Fixed-width format for consistent alignment
         printf "%-4d%-30s\n" "$i" "${MENU_ITEMS[$func]}"
         ((i++))
@@ -2061,7 +2084,6 @@ display_menu() {
             debug_end "$debug"
             exit 0
         elif [[ "$choice" -ge 1 && "$choice" -lt "$i" ]]; then
-            # shellcheck disable=SC2154
             local func="${menu_array[choice-1]}"
             "$func" "$debug"
         else
@@ -2070,6 +2092,52 @@ display_menu() {
     else
         printf "Invalid input. Please enter a number.\n"
     fi
+
+    # Debug log: function exit
+    debug_end "$debug"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Displays the main menu.
+# @details Calls the `display_menu` function with the main menu array.
+#
+# @param $1 Debug flag for optional debug output.
+#
+# @return Calls `display_menu` with the main menu array.
+# -----------------------------------------------------------------------------
+display_main_menu() {
+    # Debug declarations
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Clear screen
+    clear
+    # Display the menu
+    display_menu MAIN_MENU[@] "$debug"
+
+    # Debug log: function exit
+    debug_end "$debug"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Displays the sub-menu.
+# @details Calls the `display_menu` function with the sub-menu array. Loops
+#          within the sub-menu until the user chooses to exit.
+#
+# @param $1 Debug flag for optional debug output.
+#
+# @return Calls `display_menu` with the sub-menu array in a loop.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+display_sub_menu() {
+    # Debug declarations
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    while true; do
+        # Clear screen
+        clear
+        # Display the menu
+        display_menu SUB_MENU[@] "$debug"
+    done
 
     # Debug log: function exit
     debug_end "$debug"
@@ -2092,7 +2160,7 @@ do_menu() {
 
     # Main script execution starts here
     while true; do
-        display_menu "$debug"
+        display_main_menu "$debug"
     done
 
     # Debug log: function exit
@@ -2865,6 +2933,47 @@ run_ap_popup() {
     fi
 }
 
+# -----------------------------------------------------------------------------
+# @brief Loads configuration variables from a specified configuration file.
+# @details This function ensures that a configuration file exists, validates
+#          its path, and then sources it to load the variables into the script.
+#          It logs debugging information and handles errors gracefully.
+#
+# @global CONFIG_FILE The path to the configuration file to be sourced.
+#
+# @throws Exits the script with an error message if:
+#         - CONFIG_FILE is not set or empty.
+#         - The specified configuration file does not exist or is invalid.
+#
+# @return None. If successful, the configuration variables are loaded into
+#         the current shell environment.
+#
+# @example
+# CONFIG_FILE="/etc/appop.conf"
+# load_config || exit 1
+# echo "WiFi Interface: $WIFI_INTERFACE"
+# -----------------------------------------------------------------------------
+load_config() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Ensure CONFIG_FILE is set and non-empty
+    if [[ -z "$CONFIG_FILE" ]]; then
+        die "CONFIG_FILE is not set. Please specify the path to the configuration file."
+    fi
+
+    # Ensure the configuration file exists and is a regular file
+    if [[ -f "$CONFIG_FILE" ]]; then
+        # Source the configuration file to load its variables
+        # shellcheck disable=SC1090
+        source "$CONFIG_FILE"
+        debug_print "Configuration file '$CONFIG_FILE' loaded successfully." "$debug"
+    else
+        die "Configuration file '$CONFIG_FILE' not found or is not a regular file."
+    fi
+
+    debug_end "$debug"
+}
+
 ############
 ### Main Functions
 ############
@@ -2882,6 +2991,8 @@ _main() {
     check_bash "$debug"                # Ensure the script is executed in a Bash shell
     check_sh_ver "$debug"              # Verify the Bash version meets minimum requirements
     check_release "$debug"             # Check Raspbian OS version compatibility
+
+    load_config "$@" "$debug"          # Load configuration file
     do_menu "$@" "$debug"              # Display main menu
 
     debug_end "$debug"

@@ -435,7 +435,7 @@ readonly MAX_OS="${MAX_OS:-15}"  # (use -1 for no upper limit)
 #     exit 1
 # fi
 # -----------------------------------------------------------------------------
-readonly SUPPORTED_BITNESS="${SUPPORTED_BITNESS:-32}" # ("32", "64", or "both")
+readonly SUPPORTED_BITNESS="${SUPPORTED_BITNESS:-both}" # ("32", "64", or "both")
 
 # -----------------------------------------------------------------------------
 # @var SUPPORTED_MODELS
@@ -467,15 +467,16 @@ readonly SUPPORTED_BITNESS="${SUPPORTED_BITNESS:-32}" # ("32", "64", or "both")
 # Ensure SUPPORTED_MODELS is initialized
 declare -A SUPPORTED_MODELS
 
-if [[ ${#SUPPORTED_MODELS[@]} -eq 0 ]]; then
+# Safely check if SUPPORTED_MODELS is empty
+if [[ -z "${SUPPORTED_MODELS+x}" || ${#SUPPORTED_MODELS[@]} -eq 0 ]]; then
     # If SUPPORTED_MODELS is not set or empty, define the default supported models
     SUPPORTED_MODELS=(
         # Unsupported models
-        ["Raspberry Pi 5|5-model-b|bcm2712"]="Not Supported"
-        ["Raspberry Pi 400|400|bcm2711"]="Not Supported"
-        ["Raspberry Pi Compute Module 4|4-compute-module|bcm2711"]="Not Supported"
-        ["Raspberry Pi Compute Module 3|3-compute-module|bcm2837"]="Not Supported"
-        ["Raspberry Pi Compute Module|compute-module|bcm2835"]="Not Supported"
+        ["Raspberry Pi 5|5-model-b|bcm2712"]="Supported"
+        ["Raspberry Pi 400|400|bcm2711"]="Supported"
+        ["Raspberry Pi Compute Module 4|4-compute-module|bcm2711"]="Supported"
+        ["Raspberry Pi Compute Module 3|3-compute-module|bcm2837"]="Supported"
+        ["Raspberry Pi Compute Module|compute-module|bcm2835"]="Supported"
         # Supported models
         ["Raspberry Pi 4 Model B|4-model-b|bcm2711"]="Supported"
         ["Raspberry Pi 3 Model A+|3-model-a-plus|bcm2837"]="Supported"
@@ -4144,7 +4145,7 @@ download_files_in_directories() {
 # @param $1 [Optional] Debug flag to enable detailed output (true/false).
 #
 # @global TERSE Indicates terse mode (skips interactive messages).
-# @global REPO_NAME The name of the repository being installed.
+# @global REPO_NAME The name of the repository used.
 #
 # @return None
 #
@@ -4156,14 +4157,14 @@ start_script() {
 
     # Check terse mode
     if [[ "${TERSE:-false}" == "true" ]]; then
-        logI "$(repo_to_title_case "${REPO_NAME:-Unknown}") installation beginning."
+        logI "$(repo_to_title_case "${REPO_NAME:-Unknown}") execution beginning."
         debug_print "Skipping interactive message due to terse mode." "$debug"
-            debug_end "$debug"
+        debug_end "$debug"
         return 0
     fi
 
     # Prompt user for input
-    printf "\nStarting installation for: %s.\n" "$(repo_to_title_case "${REPO_NAME:-Unknown}")"
+    printf "\nStarting run for: %s.\n" "$(repo_to_title_case "${REPO_NAME:-Unknown}")"
     printf "Press any key to continue or 'Q' to quit (defaulting in 10 seconds).\n"
 
     # Read a single key with a 10-second timeout
@@ -4175,15 +4176,15 @@ start_script() {
     # Handle user input
     case "${key}" in
         [Qq])  # Quit
-            debug_print "Quit key pressed. Ending installation." "$debug"
-            logI "Installation canceled by user."
+            debug_print "Quit key pressed. Ending run." "$debug"
+            logI "Run canceled by user."
             exit_script "Script canceled" "$debug"
             ;;
         "")  # Timeout or Enter
-            debug_print "No key pressed, proceeding with installation." "$debug"
+            debug_print "No key pressed, proceeding with run." "$debug"
             ;;
         *)  # Any other key
-            debug_print "Key pressed: '$key'. Proceeding with installation." "$debug"
+            debug_print "Key pressed: '$key'. Proceeding with run." "$debug"
             ;;
     esac
 
@@ -4498,14 +4499,14 @@ finish_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     if [[ "$TERSE" == "true" || "$TERSE" != "true" ]]; then
-        logI "Installation complete: $(repo_to_title_case "$REPO_NAME")."
-        debug_print "Installation complete message logged." "$debug"
+        logI "Run complete: $(repo_to_title_case "$REPO_NAME")."
+        debug_print "Run complete message logged." "$debug"
     fi
 
     # Clear screen (optional if required)
     if [[ "$TERSE" == "true" ]]; then
         # clear
-        printf "Installation complete: %s.\n" "$(repo_to_title_case "$REPO_NAME")"
+        printf "Run complete: %s.\n" "$(repo_to_title_case "$REPO_NAME")"
     fi
 
     debug_end "$debug"
