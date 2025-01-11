@@ -5,6 +5,7 @@ set +o noclobber
 
 #########################################################################
 # TODO:
+#   - Develop man pages
 #   - Setup a New WiFi Network or Change Password fails to register choice
 #   - Examine: declare -ar SYSTEM_READS=()
 #   - Figure out:
