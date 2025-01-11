@@ -15,10 +15,13 @@ set +o noclobber
 #           Upon completion, the controller may be executed with:
 #               $ sudo apconfig
 #
-# @usage ./install.sh [mode] [options]
-# @note The script uses a modular design with functions for different tasks.
+# @author Lee Bussy
+# @date January 11, 2025
+# @version 1.0.0
 #
-# -----------------------------------------------------------------------------
+# @copyright
+# This project is open-source and can be modified or distributed under the
+# terms of the MIT license.
 #
 # -----------------------------------------------------------------------------
 # @section parameters Parameters
