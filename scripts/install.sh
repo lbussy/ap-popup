@@ -632,6 +632,7 @@ readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"
 # @note The function uses `history | wc -l` to count the commands executed in
 #       the current session and `date` to capture the session end time.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 egress() {
     # TODO: Add any cleanup items here
     true
@@ -896,6 +897,7 @@ stack_trace() {
     # Foreground colors
     local fgred="\033[31m"    # Red text
     local fggrn="\033[32m"    # Green text
+    # shellcheck disable=SC2034
     local fgylw="\033[33m"    # Yellow text
     local fgblu="\033[34m"    # Blue text
     local fgmag="\033[35m"    # Magenta text
@@ -915,13 +917,14 @@ stack_trace() {
     # Create header and footer
     local dash_count=$(( (width - ${#header_name} - 2) / 2 ))
     local header_l header_r
-    header_l="$(printf '%*s' "$dash_count" | tr ' ' "$char")"
+    header_l="$(printf '%*s' "$dash_count" '' | tr ' ' "$char")"
     header_r="$header_l"
     [[ $(( (width - ${#header_name}) % 2 )) -eq 1 ]] && header_r="${header_r}${char}"
-    local header=$(printf "%b%s%b %b%b%s%b %b%s%b" \
-        "$color" "$header_l" "$reset" "$color" "$bold" "$header_name" "$reset" "$color" "$header_r" "$reset")
-    local footer
-    footer="$(printf '%b%s%b' "$color" "$(printf '%*s' "$width" | tr ' ' "$char")" "$reset")"
+    local header
+    header=$(printf "%b%s%b %b%b%s%b %b%s%b" "$color" "$header_l" "$reset" "$color" "$bold" "$header_name" "$reset" "$color" "$header_r" "$reset")
+    local footer formatted_line
+    formatted_line="$(printf '%*s' "$width" '' | tr ' ' "$char")"
+    footer="$(printf '%b%s%b' "$color" "$formatted_line" "$reset")"
 
     # Print header
     printf "%s\n" "$header"
@@ -932,9 +935,9 @@ stack_trace() {
         local result primary overflow secondary
         if command -v wrap_messages >/dev/null 2>&1; then
             result=$(wrap_messages "$width" "$message" || true)
-            primary="${result%%${delimiter}*}"
-            result="${result#*${delimiter}}"
-            overflow="${result%%${delimiter}*}"
+            primary="${result%%"${delimiter}"*}"
+            result="${result#*"${delimiter}"}"
+            overflow="${result%%"${delimiter}"*}"
         else
             primary="$message"
         fi
@@ -944,7 +947,7 @@ stack_trace() {
     fi
 
     # Print stack trace
-    local indent=$(( ($width / 2) - ((longest_length + 28) / 2) ))
+    local indent=$(( (width / 2) - ((longest_length + 28) / 2) ))
     indent=$(( indent < 0 ? 0 : indent ))
     if [[ -z "${displayed_stack[*]}" ]]; then
         printf "%b[WARN ]%b Stack trace is empty.\n" "$fggld" "$reset" >&2
@@ -1064,10 +1067,10 @@ warn() {
     local result primary overflow secondary
     if command -v wrap_messages >/dev/null 2>&1; then
         result=$(wrap_messages "$adjusted_width" "$message" "$details" || true)
-        primary="${result%%${delimiter}*}"
-        result="${result#*${delimiter}}"
-        overflow="${result%%${delimiter}*}"
-        secondary="${result#*${delimiter}}"
+        primary="${result%%"${delimiter}"*}"
+        result="${result#*"${delimiter}"}"
+        overflow="${result%%"${delimiter}"*}"
+        secondary="${result#*"${delimiter}"}"
     else
         primary="$message"
         overflow=""
@@ -1201,10 +1204,10 @@ die() {
     local result primary overflow secondary
     if command -v wrap_messages >/dev/null 2>&1; then
         result=$(wrap_messages "$adjusted_width" "$message" "$details" || true)
-        primary="${result%%${delimiter}*}"
-        result="${result#*${delimiter}}"
-        overflow="${result%%${delimiter}*}"
-        secondary="${result#*${delimiter}}"
+        primary="${result%%"${delimiter}"*}"
+        result="${result#*"${delimiter}"}"
+        overflow="${result%%"${delimiter}"*}"
+        secondary="${result#*"${delimiter}"}"
     else
         primary="$message"
         overflow=""
@@ -1251,6 +1254,7 @@ die() {
 # add_dot ".example"  # Outputs ".example"
 # add_dot ""          # Logs a warning and returns an error.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 add_dot() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1323,6 +1327,7 @@ remove_dot() {
 # result=$(add_period "Hello")
 # printf "%s\n" "$result"  # Output: "Hello."
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 add_period() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1361,6 +1366,7 @@ add_period() {
 # remove_period "example"   # Outputs "example"
 # remove_period ""          # Logs an error and returns an error code.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 remove_period() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1398,6 +1404,7 @@ remove_period() {
 # add_slash "/path/to/directory/" # Outputs "/path/to/directory/"
 # add_slash ""                    # Logs an error and returns an error code.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 add_slash() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1436,6 +1443,7 @@ add_slash() {
 # remove_slash "/path/to/directory"   # Outputs "/path/to/directory"
 # remove_slash ""                     # Logs an error and returns an error code
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 remove_slash() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1465,6 +1473,7 @@ remove_slash() {
 # @example
 # pause
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 pause() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1497,7 +1506,6 @@ pause() {
 # print_system debug
 # Outputs system information with debug logs enabled.
 # -----------------------------------------------------------------------------
-# shellcheck disable=2329
 print_system() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1985,8 +1993,7 @@ check_url() {
 
     # Perform the connectivity check, allowing SSL and proxy errors
     local retval
-    # shellcheck disable=2086
-    if $tool $options "$url" &>/dev/null; then
+    if $tool "$options" "$url" &>/dev/null; then
         debug_print "Successfully connected to $#url using $tool." "$debug"
         retval=0
     else
@@ -2437,8 +2444,7 @@ log_message_with_severity() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Exit if the calling function is not one of the allowed ones.
-    # shellcheck disable=2076
-    if [[ ! "logD logI logW logE logC logX" =~ "${FUNCNAME[1]}" ]]; then
+    if [[ ! "logD logI logW logE logC logX" =~ ${FUNCNAME[1]} ]]; then
         warn "Invalid calling function: ${FUNCNAME[1]}"
             debug_end "$debug"
         exit 1
@@ -2516,17 +2522,17 @@ log_message_with_severity() {
 #   logC "System is out of memory and must shut down."
 #   logX "Additional debug information for extended analysis."
 # -----------------------------------------------------------------------------
-# shellcheck disable=2329
+# shellcheck disable=SC2317
 logD() { log_message_with_severity "DEBUG" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2329
+# shellcheck disable=SC2317
 logI() { log_message_with_severity "INFO" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2329
+# shellcheck disable=SC2317
 logW() { log_message_with_severity "WARNING" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2329
+# shellcheck disable=SC2317
 logE() { log_message_with_severity "ERROR" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2329
+# shellcheck disable=SC2317
 logC() { log_message_with_severity "CRITICAL" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2329
+# shellcheck disable=SC2317
 logX() { log_message_with_severity "EXTENDED" "${1:-}" "${2:-}" "${3:-}"; }
 
 # -----------------------------------------------------------------------------
@@ -2654,6 +2660,7 @@ init_colors() {
 
     # General text attributes
     BOLD=$(default_color bold)
+    # shellcheck disable=SC2034
     DIM=$(default_color dim)
     SMSO=$(default_color smso)
     RMSO=$(default_color rmso)
@@ -2696,10 +2703,13 @@ init_colors() {
     RESET=$(default_color sgr0)
 
     # Set variables as readonly
-    # shellcheck disable=2303
+    # shellcheck disable=SC2034
     readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE
+    # shellcheck disable=SC2034
     readonly BLINK NO_BLINK ITALIC NO_ITALIC MOVE_UP CLEAR_LINE
+    # shellcheck disable=SC2034
     readonly FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST FGGLD
+    # shellcheck disable=SC2034
     readonly BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
 
     debug_end "$debug"
@@ -2720,6 +2730,7 @@ init_colors() {
 # @example
 # generate_separator "heavy"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 generate_separator() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -2859,6 +2870,7 @@ setup_log() {
 #
 # @return 0 on success, 1 on invalid input.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 toggle_console_log() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -2912,6 +2924,7 @@ toggle_console_log() {
 #
 # @throws Exits with an error if the repository name is empty.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 repo_to_title_case() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -2966,6 +2979,7 @@ repo_to_title_case() {
 # @example
 # download_file "path/to/file.txt" "/local/dir"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 download_file() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local file_path="$1"
@@ -3021,6 +3035,7 @@ download_file() {
 # @example
 # fetch_tree
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 fetch_tree() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local branch_sha
@@ -3056,11 +3071,12 @@ fetch_tree() {
 # @example
 # download_files_in_directories
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 download_files_in_directories() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local dest_root="$USER_HOME/$REPO_NAME"
     debug_print "Fetching repository tree." "$debug"
-    local tree=$(fetch_tree)
+    local tree; tree=$(fetch_tree "$debug")
 
     if [[ $(printf "%s" "$tree" | jq '.tree | length') -eq 0 ]]; then
         die 1 "Failed to fetch repository tree. Check repository details or ensure it is public."
@@ -3118,6 +3134,7 @@ download_files_in_directories() {
 # @example
 # DRY_RUN=true exec_new_shell "ListFiles" "ls -l" "debug"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 exec_new_shell() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -3177,13 +3194,14 @@ exec_new_shell() {
 # @example
 # exec_command "Test Command" "printf Hello World\n" "debug"
 # -----------------------------------------------------------------------------
-# TODO: Move this to template (allow running a function)
 exec_command() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    # Extract action and remaining arguments
-    local parse_result=""; parse_result=$(parse_action_and_args "$@")
-    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
-    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
+    # Convert the string after '|' into an array
+    local -a args=()  # Ensure `args` is an array
+    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
+    # Reset the positional arguments to the parsed array
+    set -- "${args[@]}"
 
     local exec_name="$1"
     local exec_process="$2"
@@ -3284,7 +3302,6 @@ exit_script() {
     # Determine exit status if not numeric
     if ! [[ "$exit_status" =~ ^[0-9]+$ ]]; then
         exit_status=1
-        message="${message}"  # No need to overwrite message here
     else
         shift  # Remove the exit_status from the arguments
     fi
@@ -3319,7 +3336,6 @@ exit_script() {
 # @example
 # start_script install debug
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
 start_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local action="${1:-install}"  # Default to "install" if no action is provided
@@ -3395,7 +3411,7 @@ start_script() {
 # check_network_manager "install"
 # check_network_manager "uninstall"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317
 check_network_manager() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local action="${1:-install}"  # Default to "install" if no action is provided
@@ -3434,7 +3450,7 @@ check_network_manager() {
 # check_hostapd_status "install" "$debug"
 # check_hostapd_status "uninstall" "$debug"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317
 check_hostapd_status() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local action="${1:-install}"  # Default to "install" if no action is provided
@@ -3481,13 +3497,9 @@ check_hostapd_status() {
 # handle_apt_packages "install" debug
 # handle_apt_packages "uninstall" debug
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317
 handle_apt_packages() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    # Extract action and remaining arguments
-    local parse_result=""; parse_result=$(parse_action_and_args "$@")
-    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
-    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
 
     # Check if APT_PACKAGES is empty
     if [[ ${#APT_PACKAGES[@]} -eq 0 ]]; then
@@ -3572,13 +3584,15 @@ handle_apt_packages() {
 # install_controller_script "install"
 # install_controller_script "uninstall"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317
 install_controller_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    # Extract action and remaining arguments
-    local parse_result=""; parse_result=$(parse_action_and_args "$@")
-    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
-    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
+    # Convert the string after '|' into an array
+    local -a args=()  # Ensure `args` is an array
+    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
+    # Reset the positional arguments to the parsed array
+    set -- "${args[@]}"
 
     local source_root source_path
     source_root="$USER_HOME/$REPO_NAME"
@@ -3668,15 +3682,17 @@ install_controller_script() {
 # install_application_script "install"
 # install_application_script "uninstall"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317
 install_application_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    # Extract action and remaining arguments
-    local parse_result=""; parse_result=$(parse_action_and_args "$@")
-    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
-    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
+    # Convert the string after '|' into an array
+    local -a args=()  # Ensure `args` is an array
+    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
+    # Reset the positional arguments to the parsed array
+    set -- "${args[@]}"
 
-    local source_root source path
+    local source_root
     source_root="$USER_HOME/$REPO_NAME"
     source_path="$source_root/scripts/$APP_SOURCE"
 
@@ -3764,13 +3780,15 @@ install_application_script() {
 # install_config_file "install"
 # install_config_file "uninstall"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317
 install_config_file() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    # Extract action and remaining arguments
-    local parse_result=""; parse_result=$(parse_action_and_args "$@")
-    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
-    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
+    # Convert the string after '|' into an array
+    local -a args=()  # Ensure `args` is an array
+    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
+    # Reset the positional arguments to the parsed array
+    set -- "${args[@]}"
 
     local source_root source_path
     source_root="$USER_HOME/$REPO_NAME"
@@ -3854,12 +3872,15 @@ install_config_file() {
 # @example
 # replace_string_in_script "script.sh" "%placeholder%" "new_value"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 replace_string_in_script() {
-    local debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    # Extract action and remaining arguments
-    local parse_result=""; parse_result=$(parse_action_and_args "$@")
-    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
-    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
+    # Convert the string after '|' into an array
+    local -a args=()  # Ensure `args` is an array
+    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
+    # Reset the positional arguments to the parsed array
+    set -- "${args[@]}"
 
     local script_file="${1:-}"
     local search_string="${2:-}"
@@ -3890,7 +3911,8 @@ replace_string_in_script() {
 
     # Perform the replacement
     sed -i "s|$full_search_string|$replacement_string|g" "$script_file"
-    if [[ $? -eq 0 ]]; then
+    local retval=$?
+    if [[ $retval -eq 0 ]]; then
         debug_print "Replacement succeeded: '$full_search_string' -> '$replacement_string' in $(basename "$script_file")" "$debug"
         debug_end "$debug"
         return 0
@@ -3924,13 +3946,15 @@ replace_string_in_script() {
 # create_systemd_service "install"
 # create_systemd_service "uninstall"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317
 create_systemd_service() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    # Extract action and remaining arguments
-    local parse_result=""; parse_result=$(parse_action_and_args "$@")
-    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
-    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
+    # Convert the string after '|' into an array
+    local -a args=()  # Ensure `args` is an array
+    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
+    # Reset the positional arguments to the parsed array
+    set -- "${args[@]}"
 
     local source_root source_file service_name
     service_name=$(basename "$SERVICE_FILE")
@@ -4120,13 +4144,15 @@ create_systemd_service() {
 # create_systemd_timer "install"
 # create_systemd_timer "uninstall"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317
 create_systemd_timer() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    # Extract action and remaining arguments
-    local parse_result=""; parse_result=$(parse_action_and_args "$@")
-    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
-    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
+    # Convert the string after '|' into an array
+    local -a args=()  # Ensure `args` is an array
+    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
+    # Reset the positional arguments to the parsed array
+    set -- "${args[@]}"
 
     local timer_name timer_root timer_path
     timer_name=$(basename "$TIMER_FILE")
@@ -4279,6 +4305,7 @@ create_systemd_timer() {
 # @example
 # files=$(get_man_file_array)
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 get_man_file_array() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local tree dir="man"
@@ -4327,13 +4354,15 @@ get_man_file_array() {
 # install_man_pages "install"
 # install_man_pages "uninstall"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317
 install_man_pages() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    # Extract action and remaining arguments
-    local parse_result=""; parse_result=$(parse_action_and_args "$@")
-    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
-    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
+    # Convert the string after '|' into an array
+    local -a args=()  # Ensure `args` is an array
+    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
+    # Reset the positional arguments to the parsed array
+    set -- "${args[@]}"
 
     local man_base_dir="/usr/share/man"
     local -a man_files
@@ -4451,13 +4480,14 @@ install_man_pages() {
 # cleanup_files_in_directories "install"
 # cleanup_files_in_directories "uninstall"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
 cleanup_files_in_directories() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    # Extract action and remaining arguments
-    local parse_result=""; parse_result=$(parse_action_and_args "$@")
-    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
-    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
+    # Convert the string after '|' into an array
+    local -a args=()  # Ensure `args` is an array
+    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
+    # Reset the positional arguments to the parsed array
+    set -- "${args[@]}"
 
     local dest_root="$USER_HOME/$REPO_NAME"
     logI "Deleting local repository tree."
@@ -4495,7 +4525,6 @@ cleanup_files_in_directories() {
 # @example
 # finish_script install debug
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
 finish_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local action="${1:-install}"  # Default to "install" if no action is provided
@@ -4520,11 +4549,19 @@ finish_script() {
     logI "$action_message complete: $REPO_DISPLAY_NAME."
     debug_print "$action_message complete message logged." "$debug"
 
-    # TODO: exec_new_shell() or call out instructions
-
     # Optionally clear the screen or display a message
-    if [[ "${TERSE:-false}" == "true" ]]; then
-        printf "%s complete: %s.\n" "$action_message" "$REPO_DISPLAY_NAME"
+    printf "%s complete: %s.\n" "$action_message" "$REPO_DISPLAY_NAME"
+
+    if [[ "$action" == "install" ]]; then
+    # Display follow-up instructions after install
+    cat << EOF
+TODO:  Provide follow-up instructions after install
+EOF
+    else
+    # Display follow-up instructions after uninstall
+    cat << EOF
+TODO:  Provide follow-up instructions after uninstall
+EOF
     fi
 
     debug_end "$debug"
@@ -4553,13 +4590,15 @@ finish_script() {
 # install_ap_popup "install"
 # install_ap_popup "uninstall"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2329
 install_ap_popup() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    # Extract action and remaining arguments
-    local parse_result=""; parse_result=$(parse_action_and_args "$@")
-    local action=""; action="${parse_result%%|*}"   # $action = before the '|'
-    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = after the '|'
+    # Get action argument
+    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
+    # Convert the string after '|' into an array
+    local -a args=()  # Ensure `args` is an array
+    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
+    # Reset the positional arguments to the parsed array
+    set -- "${args[@]}"
 
     # Define the group of functions to install/uninstall
     local install_group=(
@@ -4675,7 +4714,7 @@ install_ap_popup() {
 # # Output: uninstall|
 # -----------------------------------------------------------------------------
 parse_action_and_args() {
-    local debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     local action=""  # To capture the action ("install" or "uninstall").
     local args=()    # Array to hold the filtered (non-action) arguments.
@@ -4709,11 +4748,13 @@ _main() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     # Extract/remove action and reset remaining arguments
     local parse_result=""; parse_result=$(parse_action_and_args "$@")
-    # Extract the action part from parse_result and default to "install" if empty
-    local action="${parse_result%%|*}"  # Extract action from parse_result
-    action="${action:-install}"        # Default to "install" if action is empty
-    # Extract the remaining arguments
-    local args=""; args="${parse_result#*|}"; eval set -- "$args"  # $@ = remaining arguments
+    # Get action argument
+    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
+    # Convert the string after '|' into an array
+    local -a args=()  # Ensure `args` is an array
+    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
+    # Reset the positional arguments to the parsed array
+    set -- "${args[@]}"
 
     # Check and set up the environment
     enforce_sudo "$debug"              # Ensure proper privileges for script execution

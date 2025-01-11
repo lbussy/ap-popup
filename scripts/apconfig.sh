@@ -154,6 +154,7 @@ declare REPO_BRANCH="${REPO_BRANCH:-main}"
 declare GIT_TAG="${GIT_TAG:-1.0.0}"
 declare SEM_VER="${SEM_VER:-${GIT_TAG}-${REPO_BRANCH}}"
 declare GIT_RAW="${GIT_RAW:-"https://raw.githubusercontent.com/$REPO_ORG/$REPO_NAME"}"
+readonly APP_NAME="${APP_NAME:-appop}"
 
 # -----------------------------------------------------------------------------
 # Declare Menu Variables
@@ -620,6 +621,7 @@ stack_trace() {
     # Foreground colors
     local fgred="\033[31m"    # Red text
     local fggrn="\033[32m"    # Green text
+    # shellcheck disable=SC2034
     local fgylw="\033[33m"    # Yellow text
     local fgblu="\033[34m"    # Blue text
     local fgmag="\033[35m"    # Magenta text
@@ -639,13 +641,26 @@ stack_trace() {
     # Create header and footer
     local dash_count=$(( (width - ${#header_name} - 2) / 2 ))
     local header_l header_r
-    header_l="$(printf '%*s' "$dash_count" | tr ' ' "$char")"
+    header_l="$(printf '%*s' "$dash_count" '' | tr ' ' "$char")"
     header_r="$header_l"
     [[ $(( (width - ${#header_name}) % 2 )) -eq 1 ]] && header_r="${header_r}${char}"
-    local header=$(printf "%b%s%b %b%b%s%b %b%s%b" \
-        "$color" "$header_l" "$reset" "$color" "$bold" "$header_name" "$reset" "$color" "$header_r" "$reset")
-    local footer
-    footer="$(printf '%b%s%b' "$color" "$(printf '%*s' "$width" | tr ' ' "$char")" "$reset")"
+    local header
+    header=$(printf "%b%s%b %b%b%s%b %b%s%b" \
+        "$color" \
+        "$header_l" \
+        "$reset" \
+        "$color" \
+        "$bold" \
+        "$header_name" \
+        "$reset" \
+        "$color" \
+        "$header_r" \
+        "$reset")
+    local footer line
+    # Generate the repeated character string
+    line="$(printf '%*s' "$width" '' | tr ' ' "$char")"
+    # Construct the footer
+    footer="$(printf '%b%s%b' "$color" "$line" "$reset")"
 
     # Print header
     printf "%s\n" "$header"
@@ -656,9 +671,9 @@ stack_trace() {
         local result primary overflow secondary
         if command -v wrap_messages >/dev/null 2>&1; then
             result=$(wrap_messages "$width" "$message" || true)
-            primary="${result%%${delimiter}*}"
-            result="${result#*${delimiter}}"
-            overflow="${result%%${delimiter}*}"
+            primary="${result%%"${delimiter}"*}"
+            result="${result#*"${delimiter}"}"
+            overflow="${result%%"${delimiter}"*}"
         else
             primary="$message"
         fi
@@ -668,7 +683,7 @@ stack_trace() {
     fi
 
     # Print stack trace
-    local indent=$(( ($width / 2) - ((longest_length + 28) / 2) ))
+    local indent=$(( (width / 2) - ((longest_length + 28) / 2) ))
     indent=$(( indent < 0 ? 0 : indent ))
     if [[ -z "${displayed_stack[*]}" ]]; then
         printf "%b[WARN ]%b Stack trace is empty.\n" "$fggld" "$reset" >&2
@@ -788,10 +803,10 @@ warn() {
     local result primary overflow secondary
     if command -v wrap_messages >/dev/null 2>&1; then
         result=$(wrap_messages "$adjusted_width" "$message" "$details" || true)
-        primary="${result%%${delimiter}*}"
-        result="${result#*${delimiter}}"
-        overflow="${result%%${delimiter}*}"
-        secondary="${result#*${delimiter}}"
+        primary="${result%%"${delimiter}"*}"
+        result="${result#*"${delimiter}"}"
+        overflow="${result%%"${delimiter}"*}"
+        secondary="${result#*"${delimiter}"}"
     else
         primary="$message"
         overflow=""
@@ -925,10 +940,10 @@ die() {
     local result primary overflow secondary
     if command -v wrap_messages >/dev/null 2>&1; then
         result=$(wrap_messages "$adjusted_width" "$message" "$details" || true)
-        primary="${result%%${delimiter}*}"
-        result="${result#*${delimiter}}"
-        overflow="${result%%${delimiter}*}"
-        secondary="${result#*${delimiter}}"
+        primary="${result%%"${delimiter}"*}"
+        result="${result#*"${delimiter}"}"
+        overflow="${result%%"${delimiter}"*}"
+        secondary="${result#*"${delimiter}"}"
     else
         primary="$message"
         overflow=""
@@ -975,6 +990,7 @@ die() {
 # add_dot ".example"  # Outputs ".example"
 # add_dot ""          # Logs a warning and returns an error.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 add_dot() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1011,6 +1027,7 @@ add_dot() {
 # remove_dot ".hidden"  # Output: "hidden"
 # remove_dot "visible"  # Output: "visible"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 remove_dot() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1047,6 +1064,7 @@ remove_dot() {
 # result=$(add_period "Hello")
 # echo "$result"  # Output: "Hello."
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 add_period() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1085,6 +1103,7 @@ add_period() {
 # remove_period "example"   # Outputs "example"
 # remove_period ""          # Logs an error and returns an error code.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 remove_period() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1122,6 +1141,7 @@ remove_period() {
 # add_slash "/path/to/directory/" # Outputs "/path/to/directory/"
 # add_slash ""                    # Logs an error and returns an error code.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 add_slash() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1160,6 +1180,7 @@ add_slash() {
 # remove_slash "/path/to/directory"   # Outputs "/path/to/directory"
 # remove_slash ""                     # Logs an error and returns an error code
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 remove_slash() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1189,6 +1210,7 @@ remove_slash() {
 # @example
 # pause
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 pause() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1595,6 +1617,7 @@ check_release() {
 # pad_with_spaces 42 6  # Output: "   42"
 # pad_with_spaces 123 5  # Output: "  123"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 pad_with_spaces() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1753,6 +1776,7 @@ init_colors() {
 
     # General text attributes
     BOLD=$(default_color bold)
+    # shellcheck disable=SC2034
     DIM=$(default_color dim)
     SMSO=$(default_color smso)
     RMSO=$(default_color rmso)
@@ -1796,9 +1820,13 @@ init_colors() {
 
     # Set variables as readonly
     # shellcheck disable=2303
+    # shellcheck disable=SC2034
     readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE
+    # shellcheck disable=SC2034
     readonly BLINK NO_BLINK ITALIC NO_ITALIC MOVE_UP CLEAR_LINE
+    # shellcheck disable=SC2034
     readonly FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST FGGLD
+    # shellcheck disable=SC2034
     readonly BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
 
     debug_end "$debug"
@@ -1831,6 +1859,7 @@ init_colors() {
 # @example
 # exec_command "Test Command" "echo Hello World" "debug"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 exec_command() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1891,7 +1920,7 @@ exec_command() {
     fi
 
     debug_end "$debug"
-    return $status
+    return "$status"
 }
 
 # -----------------------------------------------------------------------------
@@ -1913,6 +1942,7 @@ exec_command() {
 # exit_script 0 "Completed successfully"
 # exit_script 1 "An error occurred"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 exit_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1927,7 +1957,6 @@ exit_script() {
     # Determine exit status if not numeric
     if ! [[ "$exit_status" =~ ^[0-9]+$ ]]; then
         exit_status=1
-        message="${message}"  # No need to overwrite message here
     else
         shift  # Remove the exit_status from the arguments
     fi
@@ -2032,6 +2061,7 @@ display_menu() {
             debug_end "$debug"
             exit 0
         elif [[ "$choice" -ge 1 && "$choice" -lt "$i" ]]; then
+            # shellcheck disable=SC2154
             local func="${menu_array[choice-1]}"
             "$func" "$debug"
         else
@@ -2189,7 +2219,7 @@ process_args() {
 
     # If any invalid argument is found, show usage instructions.
     if [[ "$invalid_argument" == true ]]; then
-        usage
+        usage stderr
     fi
 
     debug_end "$debug"
@@ -2241,7 +2271,7 @@ usage() {
 
     local max_flag_len=0
     for entry in "${OPTIONS_LIST[@]}"; do
-        local flag=$(echo "$entry" | cut -d' ' -f1)
+        local flag; flag=$(echo "$entry" | cut -d' ' -f1)
         local flag_len=${#flag}
         if (( flag_len > max_flag_len )); then
             max_flag_len=$flag_len
@@ -2250,13 +2280,12 @@ usage() {
 
     # Second pass to print with padded formatting for flag arguments
     for entry in "${OPTIONS_LIST[@]}"; do
-        local flag=$(echo "$entry" | cut -d' ' -f1)
-        local complex_flag=$(echo "$entry" | cut -d' ' -f2)
-        local function=$(echo "$entry" | cut -d' ' -f3)
-        local description=$(echo "$entry" | cut -d' ' -f4- | rev | cut -d' ' -f2- | rev)
+        local flag; flag=$(echo "$entry" | cut -d' ' -f1)
+        local complex_flag; complex_flag=$(echo "$entry" | cut -d' ' -f2)
+        local description; description=$(echo "$entry" | cut -d' ' -f4- | rev | cut -d' ' -f2- | rev)
         local exit_flag=$((1 - $(echo "$entry" | awk '{print $NF}')))  # Invert the value
 
-        printf "  %$(($max_flag_len))s: %s\n" "$(echo "$flag" | tr '|' ' ')" "$description" >&$output_redirect
+        printf "  %$((max_flag_len))s: %s\n" "$(echo "$flag" | tr '|' ' ')" "$description" >&$output_redirect
     done
 
     debug_end "$debug"
@@ -2292,6 +2321,7 @@ usage() {
 #   .
 #   Enter the number corresponding to the network you wish to configure:
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 setup_wifi_network() {
     local wifi_list=()
     local selection=""
@@ -2303,12 +2333,14 @@ setup_wifi_network() {
         return
     fi
 
-    printf "${FGYLW}${BOLD}Add or modify a WiFi Network${RESET}\n"
+    printf "%s%sAdd or modify a WiFi Network%s\n" "$FGYLW" "$BOLD" "$RESET"
     printf "\nScanning for available WiFi networks.\n"
 
     # Scan for WiFi networks, retrying if the device is busy
     while [ "$attempts" -lt "$max_attempts" ]; do
-        IFS=$'\n' wifi_list=($(iw dev "$WIFI_INTERFACE" scan ap-force | grep -E "SSID:" | sed 's/SSID: //'))
+        wifi_list=()
+        mapfile -t wifi_list < <(iw dev "$WIFI_INTERFACE" scan ap-force | grep -E "SSID:" | sed 's/SSID: //')
+
         if [ "${#wifi_list[@]}" -gt 0 ]; then
             break
         elif [ "$attempts" -ge "$((max_attempts - 1))" ]; then
@@ -2332,7 +2364,7 @@ setup_wifi_network() {
 
     printf "\nDetected WiFi networks:\n"
     for i in "${!wifi_list[@]}"; do
-        local trimmed_entry=$(printf "%s" "${wifi_list[i]}" | xargs)
+        local trimmed_entry; trimmed_entry=$(printf "%s" "${wifi_list[i]}" | xargs)
         printf "%d)\t%s\n" $((i + 1)) "$trimmed_entry"
     done
     printf "%d)\tCancel\n" "$(( ${#wifi_list[@]} + 1 ))"
@@ -2369,15 +2401,17 @@ setup_wifi_network() {
 # @global APP_PATH    The full path to the AP Pop-Up script.
 # @return None
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 switch_between_wifi_and_ap() {
     # clear
     logI "Switching between WiFi and Access Point."
 
     # Check if the script is available and execute it
-    if which "$SCRIPT_NAME" &>/dev/null; then
-        exec_command "Calling $SCRIPT_NAME" "$APP_PATH"
+    if which "$APP_NAME" &>/dev/null; then
+        # TODO: Need an argument to force the switch
+        exec_command "Calling $APP_NAME" "sudo appop"
     else
-        warn "$SCRIPT_NAME not available. Install first."
+        warn "$APP_NAME not available. Install first."
     fi
 }
 
@@ -2393,6 +2427,7 @@ switch_between_wifi_and_ap() {
 #
 # @return None
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 update_access_point_ip() {
     if [ ! -f "$CONFIG_FILE" ]; then
         # clear
@@ -2477,6 +2512,7 @@ EOF
 #
 # @return None
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 update_access_point_ssid() {
     # clear
 
@@ -2494,7 +2530,9 @@ EOF
         if [[ ${#new_ssid} -ge 1 && ${#new_ssid} -le 32 && "$new_ssid" =~ ^[[:print:]]+$ && "$new_ssid" != *" "* ]]; then
             AP_SSID="$new_ssid"
             sed -i "s/^AP_SSID=.*/AP_SSID=\"$new_ssid\"/" "$CONFIG_FILE"
-            printf "\n${FGYLW}<< AP SSID updated to:${RESET} ${FGGRN}$new_ssid${RESET}\n"
+            printf "\n%s<< AP SSID updated to:%s %s%s%s\n" \
+                "$FGYLW" "$RESET" "$FGGRN" "$new_ssid" "$RESET"
+
         else
             logE "Invalid SSID. Must be 1-32 printable characters with no leading/trailing spaces."
             return
@@ -2517,7 +2555,8 @@ EOF
         if [[ ${#new_pw} -ge 8 && ${#new_pw} -le 63 && "$new_pw" =~ ^[[:print:]]+$ ]]; then
             AP_PASSWORD="$new_pw"
             sed -i "s/^AP_PASSWORD=.*/AP_PASSWORD=\"$new_pw\"/" "$CONFIG_FILE"
-            printf "\n${FGYLW}<< AP Password updated to:${RESET} ${FGGRN}$new_pw${RESET}\n"
+            printf "\n%s<< AP Password updated to:%s %s%s%s\n" \
+                "$FGYLW" "$RESET" "$FGGRN" "$new_pw" "$RESET"
         else
             logE "Invalid password. Must be 8-63 printable characters with no leading/trailing spaces."
         fi
@@ -2538,6 +2577,7 @@ EOF
 # @global RESET    Reset color code for terminal output.
 # @return None
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 update_hostname() {
     # clear
     local current_hostname
@@ -2563,7 +2603,8 @@ EOF
             exec_command "Update shell session's HOSTNAME variable" "export HOSTNAME=$new_hostname"
             exec_command "Reload hostname-related services" "systemctl restart avahi-daemon"
 
-            printf "\n${FGYLW}<< Hostname updated to:${RESET} ${FGGRN}$new_hostname${RESET}\n"
+            printf "\n%s<< Hostname updated to:%s %s%s%s\n" \
+                "$FGYLW" "$RESET" "$FGGRN" "$new_hostname" "$RESET"
         else
             printf "Invalid hostname. Please follow the hostname rules.\n" >&2
         fi
@@ -2595,6 +2636,7 @@ EOF
 #   Password updated. Attempting to connect to MyNetwork.
 #   Successfully connected to MyNetwork.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 update_wifi_profile() {
     local ssid="$1"
     local password=""
@@ -2616,7 +2658,8 @@ update_wifi_profile() {
             nmcli connection modify "$existing_profile" wifi-sec.psk "$password"
             printf "Password updated. Attempting to connect to %s.\n" "$existing_profile"
             connection_status=$(nmcli device wifi connect "$existing_profile" 2>&1)
-            if [ $? -eq 0 ]; then
+            local retval=$?
+            if [ "$retval" -eq 0 ]; then
                 printf "Successfully connected to %s.\n" "$ssid"
             else
                 printf "Failed to connect to %s. Error: %s\n" "$ssid" "$connection_status"
@@ -2637,7 +2680,8 @@ update_wifi_profile() {
         if [ -n "$password" ] && [ "${#password}" -ge 8 ]; then
             printf "Creating a new profile and attempting to connect to %s.\n" "$ssid"
             connection_status=$(nmcli device wifi connect "$ssid" password "$password" 2>&1)
-            if [ $? -eq 0 ]; then
+            local retval=$?
+            if [ "$retval" -eq 0 ]; then
                 printf "Successfully connected to %s and profile saved.\n" "$ssid"
             else
                 printf "Failed to connect to %s. Error: %s\n" "$ssid" "$connection_status"
@@ -2658,6 +2702,7 @@ update_wifi_profile() {
 # @param $2 The new gateway IP address (e.g., "192.168.0.254").
 # @return 0 if valid, 1 if invalid.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 validate_ap_configuration() {
     local new_subnet="$1"
     local new_gateway="$2"
@@ -2695,6 +2740,7 @@ validate_ap_configuration() {
 # @param $1 The hostname to validate.
 # @return 0 if the hostname is valid, 1 otherwise.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 validate_hostname() {
     local hostname="$1"
 
@@ -2734,6 +2780,7 @@ validate_hostname() {
 # @param $2 The maximum allowed value.
 # @return Outputs "true" if valid, logs a warning and outputs nothing if invalid.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 validate_host_number() {
     local num="$1"
     local max="$2"  # Maximum allowed value
@@ -2754,6 +2801,7 @@ validate_host_number() {
 # @param $1 The new AP subnet in CIDR format (e.g., "192.168.0.1/24").
 # @return 0 if no conflicts, 1 if conflicts are detected.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 validate_network_conflict() {
     local new_subnet="$1"  # New AP subnet
     local active_networks
@@ -2780,6 +2828,7 @@ validate_network_conflict() {
 # @param $2 The gateway IP address (e.g., "192.168.0.254").
 # @return 0 if valid, 1 if invalid.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 validate_subnet() {
     local ip="$1"
     local gw="$2"
@@ -2802,15 +2851,17 @@ validate_subnet() {
 # @global APP_PATH    The full path to the AP Pop-Up script.
 # @return None
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 run_ap_popup() {
     # clear
     logI "Running AP Pop-Up."
 
     # Check if the script is available and execute it
-    if which "$SCRIPT_NAME" &>/dev/null; then
-        exec_command "Calling $SCRIPT_NAME" "$APP_PATH"
+    if which "$APP_NAME" &>/dev/null; then
+        # TODO:  Figure out if an argument is needed
+        exec_command "Calling $APP_NAME" "sudo $APP_NAME"
     else
-        warn "$SCRIPT_NAME not available. Install first."
+        warn "$APP_NAME not available. Install first."
     fi
 }
 
