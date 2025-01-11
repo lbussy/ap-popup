@@ -63,7 +63,7 @@ set +o noclobber
 #
 # @return None (exits the script with an error code).
 # -----------------------------------------------------------------------------
-# shellcheck disable=2329
+# shellcheck disable=2317
 trap_error() {
     # Capture function name, line number, and script name
     local func="${FUNCNAME[1]:-main}" # Get the call function (default: "main")
@@ -290,33 +290,13 @@ readonly GIT_DIRS="${GIT_DIRS:-("man" "scripts" "conf")}"
 declare USER_HOME
 if [[ "$REQUIRE_SUDO" == true && -z "${SUDO_USER-}" ]]; then
     # Fail gracefully if REQUIRE_SUDO is true and SUDO_USER is not set
-    readonly USER_HOME=""
+    USER_HOME=""
 elif [[ -n "${SUDO_USER-}" ]]; then
     # Use SUDO_USER's home directory if it's set
-    readonly USER_HOME=$(eval echo "~$SUDO_USER")
+    USER_HOME=$(eval echo "~$SUDO_USER")
 else
     # Fallback to HOME if SUDO_USER is not set
-    readonly USER_HOME="$HOME"
-fi
-
-# -----------------------------------------------------------------------------
-# @var REAL_USER
-# @brief Actual user executing the script.
-# @details This variable stores the real user who is running the script. If the
-#          script is being executed with `sudo`, it will store the user who
-#          invoked `sudo` (i.e., the actual user), otherwise it stores the
-#          current user.
-# -----------------------------------------------------------------------------
-declare REAL_USER
-if [[ "$REQUIRE_SUDO" == true && -z "${SUDO_USER-}" ]]; then
-    # Fail gracefully if REQUIRE_SUDO is true and SUDO_USER is not set
-    readonly REAL_USER=""
-elif [[ -n "${SUDO_USER-}" ]]; then
-    # Use SUDO_USER if it's set
-    readonly REAL_USER="$SUDO_USER"
-else
-    # Fallback to whoami if SUDO_USER is not set
-    readonly REAL_USER="$(whoami)"
+    USER_HOME="$HOME"
 fi
 
 # -----------------------------------------------------------------------------
@@ -487,8 +467,8 @@ readonly SUPPORTED_BITNESS="${SUPPORTED_BITNESS:-32}" # ("32", "64", or "both")
 # Ensure SUPPORTED_MODELS is initialized
 declare -A SUPPORTED_MODELS
 
-if [[ -z "${SUPPORTED_MODELS-}" ]]; then
-    # If SUPPORTED_MODELS is not set, define the default supported models
+if [[ ${#SUPPORTED_MODELS[@]} -eq 0 ]]; then
+    # If SUPPORTED_MODELS is not set or empty, define the default supported models
     SUPPORTED_MODELS=(
         # Unsupported models
         ["Raspberry Pi 5|5-model-b|bcm2712"]="Not Supported"
@@ -511,14 +491,9 @@ if [[ -z "${SUPPORTED_MODELS-}" ]]; then
         ["Raspberry Pi Zero|model-zero|bcm2835"]="Supported"
         ["Raspberry Pi Zero W|model-zero-w|bcm2835"]="Supported"
     )
-elif [[ "$SUPPORTED_MODELS" == "all" ]]; then
-    # If SUPPORTED_MODELS is set to "all", use a special value
-    SUPPORTED_MODELS=(
-        ["all"]="Supported"
-    )
-else
-    # If SUPPORTED_MODELS is passed as an environment variable, evaluate it
-    eval "SUPPORTED_MODELS=${SUPPORTED_MODELS}"
+elif [[ ${SUPPORTED_MODELS[all]+_} ]]; then
+    # If SUPPORTED_MODELS contains "all", set it as a special value
+    SUPPORTED_MODELS=( ["all"]="Supported" )
 fi
 
 # -----------------------------------------------------------------------------
@@ -786,6 +761,7 @@ readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"
 # -----------------------------------------------------------------------------
 egress() {
     # TODO: Add any cleanup items here
+    # shellcheck disable=SC2317
     true
 }
 
@@ -1048,7 +1024,6 @@ stack_trace() {
     # Foreground colors
     local fgred="\033[31m"    # Red text
     local fggrn="\033[32m"    # Green text
-    local fgylw="\033[33m"    # Yellow text
     local fgblu="\033[34m"    # Blue text
     local fgmag="\033[35m"    # Magenta text
     local fgcyn="\033[36m"    # Cyan text
@@ -1067,13 +1042,27 @@ stack_trace() {
     # Create header and footer
     local dash_count=$(( (width - ${#header_name} - 2) / 2 ))
     local header_l header_r
-    header_l="$(printf '%*s' "$dash_count" | tr ' ' "$char")"
+    header_l="$(printf '%*s' "$dash_count" '' | tr ' ' "$char")"
     header_r="$header_l"
     [[ $(( (width - ${#header_name}) % 2 )) -eq 1 ]] && header_r="${header_r}${char}"
-    local header=$(printf "%b%s%b %b%b%s%b %b%s%b" \
-        "$color" "$header_l" "$reset" "$color" "$bold" "$header_name" "$reset" "$color" "$header_r" "$reset")
-    local footer
-    footer="$(printf '%b%s%b' "$color" "$(printf '%*s' "$width" | tr ' ' "$char")" "$reset")"
+    local header; header=$(printf "%b%s%b %b%b%s%b %b%s%b" \
+        "$color" \
+        "$header_l" \
+        "$reset" \
+        "$color" \
+        "$bold" \
+        "$header_name" \
+        "$reset" \
+        "$color" \
+        "$header_r" \
+        "$reset" \
+    )
+
+    # Construct the footer
+    local footer line
+    # Generate the line of characters
+    line="$(printf '%*s' "$width" '' | tr ' ' "$char")"
+    footer="$(printf '%b%s%b' "$color" "$line" "$reset")"
 
     # Print header
     printf "%s\n" "$header"
@@ -1084,9 +1073,9 @@ stack_trace() {
         local result primary overflow secondary
         if command -v wrap_messages >/dev/null 2>&1; then
             result=$(wrap_messages "$width" "$message" || true)
-            primary="${result%%${delimiter}*}"
-            result="${result#*${delimiter}}"
-            overflow="${result%%${delimiter}*}"
+            primary="${result%%"${delimiter}"*}"
+            result="${result#*"${delimiter}"}"
+            overflow="${result%%"${delimiter}"*}"
         else
             primary="$message"
         fi
@@ -1096,7 +1085,7 @@ stack_trace() {
     fi
 
     # Print stack trace
-    local indent=$(( ($width / 2) - ((longest_length + 28) / 2) ))
+    local indent=$(( (width / 2) - ((longest_length + 28) / 2) ))
     indent=$(( indent < 0 ? 0 : indent ))
     if [[ -z "${displayed_stack[*]}" ]]; then
         printf "%b[WARN ]%b Stack trace is empty.\n" "$fggld" "$reset" >&2
@@ -1216,10 +1205,10 @@ warn() {
     local result primary overflow secondary
     if command -v wrap_messages >/dev/null 2>&1; then
         result=$(wrap_messages "$adjusted_width" "$message" "$details" || true)
-        primary="${result%%${delimiter}*}"
-        result="${result#*${delimiter}}"
-        overflow="${result%%${delimiter}*}"
-        secondary="${result#*${delimiter}}"
+        primary="${result%%"${delimiter}"*}"
+        result="${result#*"${delimiter}"}"
+        overflow="${result%%"${delimiter}"*}"
+        secondary="${result#*"${delimiter}"}"
     else
         primary="$message"
         overflow=""
@@ -1353,10 +1342,10 @@ die() {
     local result primary overflow secondary
     if command -v wrap_messages >/dev/null 2>&1; then
         result=$(wrap_messages "$adjusted_width" "$message" "$details" || true)
-        primary="${result%%${delimiter}*}"
-        result="${result#*${delimiter}}"
-        overflow="${result%%${delimiter}*}"
-        secondary="${result#*${delimiter}}"
+        primary="${result%%"${delimiter}"*}"
+        result="${result#*"${delimiter}"}"
+        overflow="${result%%"${delimiter}"*}"
+        secondary="${result#*"${delimiter}"}"
     else
         primary="$message"
         overflow=""
@@ -1403,6 +1392,7 @@ die() {
 # add_dot ".example"  # Outputs ".example"
 # add_dot ""          # Logs a warning and returns an error.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 add_dot() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1475,6 +1465,7 @@ remove_dot() {
 # result=$(add_period "Hello")
 # echo "$result"  # Output: "Hello."
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 add_period() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1513,6 +1504,7 @@ add_period() {
 # remove_period "example"   # Outputs "example"
 # remove_period ""          # Logs an error and returns an error code.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 remove_period() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1550,6 +1542,7 @@ remove_period() {
 # add_slash "/path/to/directory/" # Outputs "/path/to/directory/"
 # add_slash ""                    # Logs an error and returns an error code.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 add_slash() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1588,6 +1581,7 @@ add_slash() {
 # remove_slash "/path/to/directory"   # Outputs "/path/to/directory"
 # remove_slash ""                     # Logs an error and returns an error code
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 remove_slash() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1617,6 +1611,7 @@ remove_slash() {
 # @example
 # pause
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 pause() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1864,7 +1859,7 @@ handle_execution_context() {
             USE_LOCAL=true
             IS_REPO=true
             IS_PATH=false
-            debug_print "Execution context: Script is within a GitHub repository."\n" >&2" "$debug"
+            debug_print "Execution context: Script is within a GitHub repository." "$debug"
             ;;
         4)
             THIS_SCRIPT=$(basename "$0")
@@ -2297,7 +2292,7 @@ check_release() {
 check_arch() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
-    local detected_model key full_name model chip this_model this_chip
+    local detected_model key full_name model chip
     local is_supported=false
 
     # Safely check if SUPPORTED_MODELS is set and if it allows all models
@@ -2309,7 +2304,7 @@ check_arch() {
     fi
 
     # Read and process the compatible string
-    if ! detected_model=$(cat /proc/device-tree/compatible 2>/dev/null | tr '\0' '\n' | grep "raspberrypi" | sed 's/raspberrypi,//'); then
+    if ! detected_model=$(tr '\0' '\n' < /proc/device-tree/compatible 2>/dev/null | sed -n 's/raspberrypi,//p'); then
         debug_end "$debug"
         die 1 "Failed to read or process /proc/device-tree/compatible. Ensure compatibility."
     fi
@@ -2327,8 +2322,6 @@ check_arch() {
         if [[ "$model" == "$detected_model" ]]; then
             if [[ "${SUPPORTED_MODELS[$key]}" == "Supported" ]]; then
                 is_supported=true
-                this_model="$full_name"
-                this_chip="$chip"
                 debug_print "Model: '$full_name' ($chip) is supported." "$debug"
             else
                 debug_end "$debug"
@@ -3010,17 +3003,17 @@ log_message_with_severity() {
 #   logC "System is out of memory and must shut down."
 #   logX "Additional debug information for extended analysis."
 # -----------------------------------------------------------------------------
-# shellcheck disable=2329
+# shellcheck disable=2317
 logD() { log_message_with_severity "DEBUG" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2329
+# shellcheck disable=2317
 logI() { log_message_with_severity "INFO" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2329
+# shellcheck disable=2317
 logW() { log_message_with_severity "WARNING" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2329
+# shellcheck disable=2317
 logE() { log_message_with_severity "ERROR" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2329
+# shellcheck disable=2317
 logC() { log_message_with_severity "CRITICAL" "${1:-}" "${2:-}" "${3:-}"; }
-# shellcheck disable=2329
+# shellcheck disable=2317
 logX() { log_message_with_severity "EXTENDED" "${1:-}" "${2:-}" "${3:-}"; }
 
 # -----------------------------------------------------------------------------
@@ -3190,10 +3183,13 @@ init_colors() {
     RESET=$(default_color sgr0)
 
     # Set variables as readonly
-    # shellcheck disable=2303
-    readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE
+    # shellcheck disable=SC2034
+    readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE DIM
+    # shellcheck disable=SC2034
     readonly BLINK NO_BLINK ITALIC NO_ITALIC MOVE_UP CLEAR_LINE
+    # shellcheck disable=SC2034
     readonly FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST FGGLD
+    # shellcheck disable=SC2034
     readonly BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
 
     debug_end "$debug"
@@ -3214,6 +3210,7 @@ init_colors() {
 # @example
 # generate_separator "heavy"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 generate_separator() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -3353,6 +3350,7 @@ setup_log() {
 #
 # @return 0 on success, 1 on invalid input.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 toggle_console_log() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -3646,6 +3644,7 @@ get_last_tag() {
 # @retval 1 Failure: prints an error message to standard error if no tag is
 #         provided.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 is_sem_ver() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -3870,35 +3869,40 @@ get_proj_params() {
 
         # Retrieve repository details
         REPO_ORG=$(get_repo_org "${debug}")
-        if [[ $? -ne 0 ]]; then
+        local retval=$?
+        if [[ $retval -ne 0 ]]; then
                     debug_end "$debug"
             die 1 "Failed to retrieve repository organization."
         fi
         debug_print "REPO_ORG set to: $REPO_ORG" "$debug"
 
         REPO_NAME=$(get_repo_name "${debug}")
-        if [[ $? -ne 0 ]]; then
+        local retval=$?
+        if [[ $retval -ne 0 ]]; then
                     debug_end "$debug"
             die 1 "Failed to retrieve repository name."
         fi
         debug_print "REPO_NAME set to: $REPO_NAME" "$debug"
 
         REPO_BRANCH=$(get_repo_branch "${debug}")
-        if [[ $? -ne 0 ]]; then
+        local retval=$?
+        if [[ $retval -ne 0 ]]; then
                     debug_end "$debug"
             die 1 "Failed to retrieve respository branch."
         fi
         debug_print "REPO_BRANCH set to: $REPO_BRANCH" "$debug"
 
         GIT_TAG=$(get_last_tag "${debug}")
-        if [[ $? -ne 0 ]]; then
+        local retval=$?
+        if [[ $retval -ne 0 ]]; then
                     debug_end "$debug"
             die 1 "Failed to retrieve last tag."
         fi
         debug_print "GIT_TAG set to: $GIT_TAG" "$debug"
 
         SEM_VER=$(get_sem_ver "${debug}")
-        if [[ $? -ne 0 ]]; then
+        local retval=$?
+        if [[ $retval -ne 0 ]]; then
                     debug_end "$debug"
             die 1 "Failed to retrieve semantic version."
         fi
@@ -3907,7 +3911,7 @@ get_proj_params() {
         # Get the root directory of the repository
         LOCAL_REPO_DIR=$(git rev-parse --show-toplevel 2>/dev/null)
         if [[ -z "${LOCAL_REPO_DIR:-}" ]]; then
-                    debug_end "$debug" `
+            debug_end "$debug"
             die 1 "Not inside a valid Git repository. Ensure the repository is properly initialized."
         fi
         debug_print "LOCAL_REPO_DIR set to: $LOCAL_REPO_DIR" "$debug"
@@ -3915,7 +3919,7 @@ get_proj_params() {
         # Set local script path based on repository structure
         LOCAL_WWW_DIR="$LOCAL_REPO_DIR/data"
         if [[ -d "${LOCAL_WWW_DIR:-}" ]]; then
-                    debug_end "$debug" `
+            debug_end "$debug"
             die 1 "HTML source directory does not exist."
         fi
         debug_print "LOCAL_WWW_DIR set to: $LOCAL_WWW_DIR" "$debug"
@@ -3976,6 +3980,7 @@ get_proj_params() {
 # @example
 # download_file "path/to/file.txt" "/local/dir"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 download_file() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local file_path="$1"
@@ -4017,6 +4022,7 @@ download_file() {
 # @example
 # git_clone
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 git_clone() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local dest_root="$USER_HOME/$REPO_NAME"
@@ -4050,6 +4056,7 @@ git_clone() {
 # @example
 # fetch_tree
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 fetch_tree() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local branch_sha
@@ -4085,11 +4092,12 @@ fetch_tree() {
 # @example
 # download_files_in_directories
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 download_files_in_directories() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local dest_root="$USER_HOME/$REPO_NAME"
     logI "Fetching repository tree."
-    local tree=$(fetch_tree)
+    local tree; tree=$( "$debug")
 
     if [[ $(printf "%s" "$tree" | jq '.tree | length') -eq 0 ]]; then
         die 1 "Failed to fetch repository tree. Check repository details or ensure it is public."
@@ -4272,6 +4280,7 @@ fi
 # @example
 # DRY_RUN=true exec_new_shell "ListFiles" "ls -l" "debug"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 exec_new_shell() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -4366,13 +4375,19 @@ exec_command() {
         # Move up & clear ephemeral line
         printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
         printf "%b[✔]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
-            debug_end "$debug"
+        debug_end "$debug"
         return 0
     fi
 
-    # 3) Actually run the command (stdout/stderr handling is up to you):
-    bash -c "$exec_process" &>/dev/null
-    local status=$?
+    # 3) Check if exec_process is a function or a command
+    local status=0
+    if declare -F "$exec_process" &>/dev/null; then
+        # It's a function, pass remaining arguments to the function
+        "$exec_process" "$@" "$debug" || status=$?
+    else
+        # It's a command, pass remaining arguments to the command
+        bash -c "$exec_process" &>/dev/null || status=$?
+    fi
 
     # 4) Move up & clear ephemeral “Running” line
     printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
@@ -4530,7 +4545,6 @@ exit_script() {
     # Determine exit status if not numeric
     if ! [[ "$exit_status" =~ ^[0-9]+$ ]]; then
         exit_status=1
-        message="${message}"  # No need to overwrite message here
     else
         shift  # Remove the exit_status from the arguments
     fi
@@ -4574,6 +4588,7 @@ MENU_ITEMS["display_main_menu"]="Display Main Menu"
 #     "display_sub_menu"
 # )
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2034
 MAIN_MENU=(
     "option_one"
     "option_two"
@@ -4592,6 +4607,7 @@ MAIN_MENU=(
 #     "display_main_menu"
 # )
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2034
 SUB_MENU=(
     "option_three"
     "display_main_menu"
@@ -4601,13 +4617,14 @@ SUB_MENU=(
 # @brief Test function one
 # @details Executes a sample action for the "Option One" menu item.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 option_one() {
     # Debug declarations
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Execute menu action
-    printf "\nRunning %s().\n" "$FUNCNAME"
-    pause
+    printf "\nRunning %s().\n" "${FUNCNAME[0]}"
+    pause "$debug"
 
     # Debug log: function exit
     debug_end "$debug"
@@ -4617,12 +4634,13 @@ option_one() {
 # @brief Test function two
 # @details Executes a sample action for the "Option Two" menu item.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 option_two() {
     # Debug declarations
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Execute menu action
-    printf "\nRunning %s().\n" "$FUNCNAME"
+    printf "\nRunning %s().\n" "${FUNCNAME[0]}"
     pause
 
     # Debug log: function exit
@@ -4633,12 +4651,13 @@ option_two() {
 # @brief Test function three
 # @details Executes a sample action for the "Option Three" menu item.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 option_three() {
     # Debug declarations
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Execute menu action
-    printf "\nRunning %s().\n" "$FUNCNAME"
+    printf "\nRunning %s().\n" "${FUNCNAME[0]}"
     pause
 
     # Debug log: function exit
@@ -4738,6 +4757,7 @@ display_main_menu() {
 #
 # @return Calls `display_menu` with the sub-menu array in a loop.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 display_sub_menu() {
     # Debug declarations
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
@@ -4833,6 +4853,7 @@ OPTIONS_LIST=(
 #
 # @return 0 on success, or the status of the last executed command.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 word_arg_one() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local retval=0
@@ -4865,6 +4886,7 @@ word_arg_one() {
 #
 # @return 0 on success, or the status of the last executed command.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 word_arg_two() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local retval=0
@@ -4899,6 +4921,7 @@ word_arg_two() {
 #
 # @return 0 on success, or the status of the last executed command.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 flag_arg_one() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local retval=0
@@ -4933,6 +4956,7 @@ flag_arg_one() {
 #
 # @return 0 on success, or the status of the last executed command.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 flag_arg_two() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local retval=0
@@ -4967,6 +4991,7 @@ flag_arg_two() {
 #
 # @return 0 on success, or the status of the last executed command.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 flag_arg_tre() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local retval=0
@@ -5001,6 +5026,7 @@ flag_arg_tre() {
 #
 # @return 0 on success, or the status of the last executed command.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 flag_arg_fwr() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local retval=0
@@ -5154,7 +5180,7 @@ process_args() {
 
     # If any invalid argument is found, show usage instructions.
     if [[ "$invalid_argument" == true ]]; then
-        usage
+        usage stderr
     fi
 
     debug_end "$debug"
@@ -5208,7 +5234,7 @@ usage() {
     local max_word_len=0
     # First pass to calculate the maximum lengths of the word arguments
     for entry in "${ARGUMENTS_LIST[@]}"; do
-        local word=$(echo "$entry" | cut -d' ' -f1)
+        local word; word=$(echo "$entry" | cut -d' ' -f1)
         local word_len=${#word}
         if (( word_len > max_word_len )); then
             max_word_len=$word_len
@@ -5217,12 +5243,11 @@ usage() {
 
     # Second pass to print with padded formatting
     for entry in "${ARGUMENTS_LIST[@]}"; do
-        local word=$(echo "$entry" | cut -d' ' -f1)
-        local function=$(echo "$entry" | cut -d' ' -f2)
-        local description=$(echo "$entry" | cut -d' ' -f3- | rev | cut -d' ' -f2- | rev)
+        local word; word=$(echo "$entry" | cut -d' ' -f1)
+        local description; description=$(echo "$entry" | cut -d' ' -f3- | rev | cut -d' ' -f2- | rev)
         local exit_flag=$((1 - $(echo "$entry" | awk '{print $NF}')))  # Invert the value
 
-        printf "  %$(($max_word_len))s: %s\n" "$word" "$description" >&$output_redirect
+        printf "  %$((max_word_len))s: %s\n" "$word" "$description" >&$output_redirect
     done
     printf "\n" >&$output_redirect
 
@@ -5230,7 +5255,7 @@ usage() {
     printf "Flag Arguments:\n" >&$output_redirect
     local max_flag_len=0
     for entry in "${OPTIONS_LIST[@]}"; do
-        local flag=$(echo "$entry" | cut -d' ' -f1)
+        local flag; flag=$(echo "$entry" | cut -d' ' -f1)
         local flag_len=${#flag}
         if (( flag_len > max_flag_len )); then
             max_flag_len=$flag_len
@@ -5239,13 +5264,12 @@ usage() {
 
     # Second pass to print with padded formatting for flag arguments
     for entry in "${OPTIONS_LIST[@]}"; do
-        local flag=$(echo "$entry" | cut -d' ' -f1)
-        local complex_flag=$(echo "$entry" | cut -d' ' -f2)
-        local function=$(echo "$entry" | cut -d' ' -f3)
-        local description=$(echo "$entry" | cut -d' ' -f4- | rev | cut -d' ' -f2- | rev)
+        local flag; flag=$(echo "$entry" | cut -d' ' -f1)
+        local complex_flag; complex_flag=$(echo "$entry" | cut -d' ' -f2)
+        local description; description=$(echo "$entry" | cut -d' ' -f4- | rev | cut -d' ' -f2- | rev)
         local exit_flag=$((1 - $(echo "$entry" | awk '{print $NF}')))  # Invert the value
 
-        printf "  %$(($max_flag_len))s: %s\n" "$(echo "$flag" | tr '|' ' ')" "$description" >&$output_redirect
+        printf "  %$((max_flag_len))s: %s\n" "$(echo "$flag" | tr '|' ' ')" "$description" >&$output_redirect
     done
 
     debug_end "$debug"
@@ -5261,9 +5285,7 @@ usage() {
 ############
 
 _main() {
-    echo $@
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    echo $debug
 
     # Check and set up the environment
     handle_execution_context "$debug"  # Get execution context and set environment variables
@@ -5285,11 +5307,12 @@ _main() {
     print_system "$debug"              # Log system information
     print_version "$debug"             # Log the script version
 
-    # Run installer steps
+    # Run template steps
     start_script "$debug"              # Start the script with instructions
     set_time "$debug"                  # Offer to change timezone if default
     process_args "$@" "$debug"         # Process command line argments
     handle_apt_packages "$debug"       # Perform APT maintenance and install/update packages
+    do_menu "$debug"                   # Execute menu
     finish_script "$debug"             # Finish the script with final instructions
 
     debug_end "$debug"

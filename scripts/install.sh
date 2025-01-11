@@ -3194,7 +3194,6 @@ exec_new_shell() {
 # @example
 # exec_command "Test Command" "printf Hello World\n" "debug"
 # -----------------------------------------------------------------------------
-# TODO: Move this to template (allow running a function)
 exec_command() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local action=""; action="${parse_result%%|*}"  # $action = before the '|'
