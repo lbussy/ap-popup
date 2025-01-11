@@ -655,7 +655,7 @@ declare -g ACTION=${ACTION:-install}
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 egress() {
-    # TODO: Add any cleanup items here
+    # Add any cleanup items here
     true
 }
 
@@ -3380,7 +3380,7 @@ start_script() {
 
     # Prompt user for input
     printf "\nStarting %s for: %s.\n" "$action_message" "$REPO_DISPLAY_NAME"
-    printf "Press any key to continue or 'Q' to quit (defaulting in 10 seconds).\n"
+    printf "Press any key to continue or 'Q' to quit (continuing install in 10 seconds).\n"
 
     # Read a single key with a 10-second timeout
     if ! read -n 1 -sr -t 10 key < /dev/tty; then
@@ -4518,12 +4518,18 @@ finish_script() {
     if [[ "$ACTION" == "install" ]]; then
     # Display follow-up instructions after install
     cat << EOF
-TODO:  Provide follow-up instructions after install
+
+Use:
+    $ sudo $CONTROLLER_NAME
+
+... to configure $REPO_DISPLAY_NAME.
 EOF
     else
     # Display follow-up instructions after uninstall
     cat << EOF
-TODO:  Provide follow-up instructions after uninstall
+
+$REPO_DISPLAY_NAME has been uninstalled.  No apt packages have
+been removed to prevent impact to other functionality.
 EOF
     fi
 
