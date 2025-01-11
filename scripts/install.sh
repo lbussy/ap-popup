@@ -3,6 +3,49 @@ set -uo pipefail
 IFS=$'\n\t'
 set +o noclobber
 
+# -----------------------------------------------------------------------------
+# @file install.sh
+# @brief Script for installation or uninstallation of AP Pop-Up scripts.
+# @details  This script handles installation and uninstallation of the
+#           AP Pop-Up scripts and supporting files. It must be run with sudo
+#           privileges.
+#
+#           It will install any necessary required packages.
+#
+#           Upon completion, the controller may be executed with:
+#               $ sudo apconfig
+#
+# @usage ./install.sh [mode] [options]
+# @note The script uses a modular design with functions for different tasks.
+#
+# -----------------------------------------------------------------------------
+#
+# -----------------------------------------------------------------------------
+# @section parameters Parameters
+# @optional $1 Mode of operation: Determines the script's behavior. Can be
+#           "install" or "uninstall".
+# @optional $2 Turn on verbose debug with the argument "debug"
+#
+# -----------------------------------------------------------------------------
+# @section example Example Usage
+# @example
+# url="https://raw.githubusercontent.com/lbussy/ap-popup/refs/heads/main/scripts/install.sh"
+# curl -fsSL "$url" | sudo bash                         # Install normally
+# curl -fsSL "$url" | sudo bash -s -- debug             # Install with verbose debug
+# curl -fsSL "$url" | sudo bash -s -- uninstall         # Uninstall
+# curl -fsSL "$url" | sudo bash -s -- uninstall debug   # Uninstall with verbose debug
+#
+# curl comamnd line:
+#
+# `-s`: Silent mode, hides progress.
+# `-S`: Shows errors if they occur.
+# `-L`: Follows redirects if the URL is redirected.
+# `| bash`: Pipes the downloaded script into bash for execution.
+# `-s`: A flag for bash, telling it to process arguments passed to the script.
+# `--`: Separates the script arguments from bash options.
+# `<ARGUMENTS>`: The arguments you want to pass to the downloaded script.
+# -----------------------------------------------------------------------------
+
 ############
 ### Global Script Declarations
 ############
