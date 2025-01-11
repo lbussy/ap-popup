@@ -63,7 +63,7 @@ log() {
 # This allows overriding the default configuration variables defined above.
 load_config() {
     if [ -f /etc/ap_popup.conf ]; then
-        # shellcheck source=/etc/ap_popup.conf
+        # shellcheck disable=SC1091
         source /etc/ap_popup.conf
     fi
 }
@@ -77,7 +77,7 @@ load_saved_profiles() {
     GLOBAL_SAVED_NETWORK_PROFILES=()
     GLOBAL_SAVED_AP_PROFILES=()
 
-    while IFS=: read -r priority name type; do
+    while IFS=: read -r _ name type; do
         if [ "$type" = "802-11-wireless" ]; then
             local mode
             mode=$(nmcli -t -f 802-11-wireless.mode connection show "$name" | tr -d '[:space:]')

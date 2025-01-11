@@ -2298,8 +2298,8 @@ usage() {
 
 # -----------------------------------------------------------------------------
 # @brief Configure a new WiFi network or modify an existing one.
-# @details Scans for available WiFi networks, allowing the user to add a new 
-#          network or change the password for an existing one. Handles retries 
+# @details Scans for available WiFi networks, allowing the user to add a new
+#          network or change the password for an existing one. Handles retries
 #          if the WiFi device is busy and validates user input for network selection.
 #
 # @global CONFIG_FILE Path to the configuration file for WiFi settings.
@@ -2309,7 +2309,7 @@ usage() {
 # @global RESET Terminal formatting reset sequence.
 #
 # @return None
-# @throws Logs an error and returns if the WiFi device is unavailable or no 
+# @throws Logs an error and returns if the WiFi device is unavailable or no
 #         networks are detected.
 #
 # @example
@@ -2417,8 +2417,8 @@ switch_between_wifi_and_ap() {
 
 # -----------------------------------------------------------------------------
 # @brief Update the Access Point (AP) IP address and Gateway in the configuration file.
-# @details Allows the user to select a base IP range, enter the third and fourth 
-#          octets, and validates the resulting IP and gateway settings. Updates 
+# @details Allows the user to select a base IP range, enter the third and fourth
+#          octets, and validates the resulting IP and gateway settings. Updates
 #          the configuration file if changes are confirmed.
 #
 # @global AP_CIDR The current AP IP range in CIDR format.
@@ -2502,8 +2502,8 @@ EOF
 
 # -----------------------------------------------------------------------------
 # @brief Update the Access Point (AP) SSID and Password in the configuration file.
-# @details Prompts the user to enter a new SSID and/or password for the AP, validates 
-#          the inputs, and updates the configuration file accordingly. 
+# @details Prompts the user to enter a new SSID and/or password for the AP, validates
+#          the inputs, and updates the configuration file accordingly.
 #          Ensures that SSIDs and passwords meet character and length requirements.
 #
 # @global AP_SSID The current AP SSID.
@@ -2615,8 +2615,8 @@ EOF
 
 # -----------------------------------------------------------------------------
 # @brief Updates the password for an existing WiFi network or creates a new profile.
-# @details Configures the selected WiFi network by either updating the password 
-#          of an existing profile or creating a new profile. Validates password 
+# @details Configures the selected WiFi network by either updating the password
+#          of an existing profile or creating a new profile. Validates password
 #          length and attempts to connect to the network.
 #
 # @param $1 The SSID of the WiFi network to configure.
@@ -2695,7 +2695,7 @@ update_wifi_profile() {
 
 # -----------------------------------------------------------------------------
 # @brief Validate a proposed Access Point (AP) configuration.
-# @details Ensures there are no network conflicts, the gateway is not in use, 
+# @details Ensures there are no network conflicts, the gateway is not in use,
 #          and the subnet and gateway are valid.
 #
 # @param $1 The new subnet in CIDR format (e.g., "192.168.0.1/24").
@@ -2795,7 +2795,7 @@ validate_host_number() {
 
 # -----------------------------------------------------------------------------
 # @brief Check for conflicts between a new subnet and active networks.
-# @details Compares the new subnet with active subnets on the system and logs 
+# @details Compares the new subnet with active subnets on the system and logs
 #          any conflicts.
 #
 # @param $1 The new AP subnet in CIDR format (e.g., "192.168.0.1/24").

@@ -615,6 +615,27 @@ readonly APT_PACKAGES=(
 # -----------------------------------------------------------------------------
 readonly WARN_STACK_TRACE="${WARN_STACK_TRACE:-false}"
 
+# -----------------------------------------------------------------------------
+# @var ACTION
+# @brief Defines the global action for the script, defaulting to "install".
+# @details This variable determines the primary operation mode of the script,
+#          such as "install" or "uninstall". If ACTION is not already set, it
+#          defaults to "install".
+#
+# @default "install"
+#
+# @example
+# # Default behavior when ACTION is not set:
+# declare ACTION=${ACTION:-install}
+# echo $ACTION  # Output: install
+#
+# # When ACTION is already set:
+# ACTION="uninstall"
+# declare ACTION=${ACTION:-install}
+# echo $ACTION  # Output: uninstall
+# -----------------------------------------------------------------------------
+declare -g ACTION=${ACTION:-install}
+
 ############
 ### Template Functions
 ############
@@ -3196,12 +3217,6 @@ exec_new_shell() {
 # -----------------------------------------------------------------------------
 exec_command() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
-    # Convert the string after '|' into an array
-    local -a args=()  # Ensure `args` is an array
-    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
-    # Reset the positional arguments to the parsed array
-    set -- "${args[@]}"
 
     local exec_name="$1"
     local exec_process="$2"
@@ -3243,7 +3258,7 @@ exec_command() {
     local status=0
     if declare -F "$exec_process" &>/dev/null; then
         # It's a function, pass remaining arguments to the function
-        "$exec_process" "$@" "$debug" "$action" || status=$?
+        "$exec_process" "$@" "$debug" "$ACTION" || status=$?
     else
         # It's a command, pass remaining arguments to the command
         bash -c "$exec_process" &>/dev/null || status=$?
@@ -3338,19 +3353,18 @@ exit_script() {
 # -----------------------------------------------------------------------------
 start_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="${1:-install}"  # Default to "install" if no action is provided
 
     # Validate action
-    if [[ "$action" != "install" && "$action" != "uninstall" ]]; then
-        debug_print "Invalid action: $action. Must be 'install' or 'uninstall'." "$debug"
-        logE "Invalid action specified: $action. Use 'install' or 'uninstall'."
+    if [[ "$ACTION" != "install" && "$ACTION" != "uninstall" ]]; then
+        debug_print "Invalid action: $ACTION. Must be 'install' or 'uninstall'." "$debug"
+        logE "Invalid action specified: $ACTION. Use 'install' or 'uninstall'."
         debug_end "$debug"
         return 1
     fi
 
     # Adjust log and prompt messages based on action
     local action_message
-    if [[ "$action" == "install" ]]; then
+    if [[ "$ACTION" == "install" ]]; then
         action_message="installation"
     else
         action_message="uninstallation"
@@ -3414,10 +3428,9 @@ start_script() {
 # shellcheck disable=SC2317
 check_network_manager() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="${1:-install}"  # Default to "install" if no action is provided
 
     # Return immediately if action is "uninstall"
-    if [[ "$action" == "uninstall" ]]; then
+    if [[ "$ACTION" == "uninstall" ]]; then
         debug_end "$debug"
         return 0
     fi
@@ -3453,10 +3466,9 @@ check_network_manager() {
 # shellcheck disable=SC2317
 check_hostapd_status() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="${1:-install}"  # Default to "install" if no action is provided
 
     # Return immediately if action is "uninstall"
-    if [[ "$action" == "uninstall" ]]; then
+    if [[ "$ACTION" == "uninstall" ]]; then
         debug_end "$debug"
         return 0
     fi
@@ -3514,31 +3526,31 @@ handle_apt_packages() {
     logI "Updating and managing required packages (this may take a few minutes)."
 
     # Update package list and fix broken installs
-    if ! exec_command "Update local package index" "sudo apt-get update -y" "$debug" "$action"; then
+    if ! exec_command "Update local package index" "sudo apt-get update -y" "$debug" "$ACTION"; then
         warn "Failed to update package list."
         ((error_count++))
     fi
-    if ! exec_command "Fixing broken or incomplete package installations" "sudo apt-get install -f -y" "$debug" "$action"; then
+    if ! exec_command "Fixing broken or incomplete package installations" "sudo apt-get install -f -y" "$debug" "$ACTION"; then
         warn "Failed to fix broken installs."
         ((error_count++))
     fi
 
     # Install, upgrade, or remove each package in the list based on the action
     for package in "${APT_PACKAGES[@]}"; do
-        if [[ "$action" == "install" ]]; then
+        if [[ "$ACTION" == "install" ]]; then
             if dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q "install ok installed"; then
-                if ! exec_command "Upgrade $package" "sudo apt-get install --only-upgrade -y $package" "$debug" "$action"; then
+                if ! exec_command "Upgrade $package" "sudo apt-get install --only-upgrade -y $package" "$debug" "$ACTION"; then
                     warn "Failed to upgrade package: $package."
                     ((error_count++))
                 fi
             else
-                if ! exec_command "Install $package" "sudo apt-get install -y $package" "$debug" "$action"; then
+                if ! exec_command "Install $package" "sudo apt-get install -y $package" "$debug" "$ACTION"; then
                     warn "Failed to install package: $package."
                     ((error_count++))
                 fi
             fi
-        elif [[ "$action" == "uninstall" ]]; then
-            if ! exec_command "Remove $package" "sudo apt-get remove -y $package" "$debug" "$action"; then
+        elif [[ "$ACTION" == "uninstall" ]]; then
+            if ! exec_command "Remove $package" "sudo apt-get remove -y $package" "$debug" "$ACTION"; then
                 warn "Failed to remove package: $package."
                 ((error_count++))
             fi
@@ -3587,18 +3599,12 @@ handle_apt_packages() {
 # shellcheck disable=SC2317
 install_controller_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
-    # Convert the string after '|' into an array
-    local -a args=()  # Ensure `args` is an array
-    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
-    # Reset the positional arguments to the parsed array
-    set -- "${args[@]}"
 
     local source_root source_path
     source_root="$USER_HOME/$REPO_NAME"
     source_path="$source_root/scripts/$CONTROLLER_SOURCE"
 
-    if [[ "$action" == "install" ]]; then
+    if [[ "$ACTION" == "install" ]]; then
         logI "Installing '$CONTROLLER_NAME'."
 
         # Install the controller script
@@ -3637,7 +3643,7 @@ install_controller_script() {
             }
         fi
 
-    elif [[ "$action" == "uninstall" ]]; then
+    elif [[ "$ACTION" == "uninstall" ]]; then
         logI "Removing '$CONTROLLER_NAME'."
 
         # Remove the controller script
@@ -3685,18 +3691,12 @@ install_controller_script() {
 # shellcheck disable=SC2317
 install_application_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
-    # Convert the string after '|' into an array
-    local -a args=()  # Ensure `args` is an array
-    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
-    # Reset the positional arguments to the parsed array
-    set -- "${args[@]}"
 
     local source_root
     source_root="$USER_HOME/$REPO_NAME"
     source_path="$source_root/scripts/$APP_SOURCE"
 
-    if [[ "$action" == "install" ]]; then
+    if [[ "$ACTION" == "install" ]]; then
         logI "Installing '$CONTROLLER_NAME'."
 
         # Install the application script
@@ -3735,7 +3735,7 @@ install_application_script() {
             }
         fi
 
-    elif [[ "$action" == "uninstall" ]]; then
+    elif [[ "$ACTION" == "uninstall" ]]; then
         logI "Removing '$CONTROLLER_NAME'."
 
         # Remove the application script
@@ -3783,18 +3783,12 @@ install_application_script() {
 # shellcheck disable=SC2317
 install_config_file() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
-    # Convert the string after '|' into an array
-    local -a args=()  # Ensure `args` is an array
-    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
-    # Reset the positional arguments to the parsed array
-    set -- "${args[@]}"
 
     local source_root source_path
     source_root="$USER_HOME/$REPO_NAME"
     source_path="$source_root/conf/$APP_NAME.conf"
 
-    if [[ "$action" == "install" ]]; then
+    if [[ "$ACTION" == "install" ]]; then
         logI "Installing '$APP_NAME' configuration."
 
         # Install the configuration file
@@ -3833,7 +3827,7 @@ install_config_file() {
             }
         fi
 
-    elif [[ "$action" == "uninstall" ]]; then
+    elif [[ "$ACTION" == "uninstall" ]]; then
         logI "Removing '$APP_NAME' configuration."
 
         # Remove the configuration file
@@ -3875,12 +3869,6 @@ install_config_file() {
 # shellcheck disable=SC2317
 replace_string_in_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
-    # Convert the string after '|' into an array
-    local -a args=()  # Ensure `args` is an array
-    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
-    # Reset the positional arguments to the parsed array
-    set -- "${args[@]}"
 
     local script_file="${1:-}"
     local search_string="${2:-}"
@@ -3949,19 +3937,13 @@ replace_string_in_script() {
 # shellcheck disable=SC2317
 create_systemd_service() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
-    # Convert the string after '|' into an array
-    local -a args=()  # Ensure `args` is an array
-    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
-    # Reset the positional arguments to the parsed array
-    set -- "${args[@]}"
 
     local source_root source_file service_name
     service_name=$(basename "$SERVICE_FILE")
     source_root="$USER_HOME/$REPO_NAME"
     source_path="$source_root/systemd/$service_name"
 
-    if [[ "$action" == "install" ]]; then
+    if [[ "$ACTION" == "install" ]]; then
         # Check if the systemd service already exists
         if ! systemctl list-unit-files --type=service | grep -q "$service_name"; then
             logI "Creating systemd service: $service_name."
@@ -4059,7 +4041,7 @@ create_systemd_service() {
 
         logI "Systemd service $service_name created."
 
-    elif [[ "$action" == "uninstall" ]]; then
+    elif [[ "$ACTION" == "uninstall" ]]; then
         logI "Removing systemd service: $service_name."
 
         if [[ "$DRY_RUN" == "true" ]]; then
@@ -4147,19 +4129,13 @@ create_systemd_service() {
 # shellcheck disable=SC2317
 create_systemd_timer() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
-    # Convert the string after '|' into an array
-    local -a args=()  # Ensure `args` is an array
-    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
-    # Reset the positional arguments to the parsed array
-    set -- "${args[@]}"
 
     local timer_name timer_root timer_path
     timer_name=$(basename "$TIMER_FILE")
     timer_root="$USER_HOME/$REPO_NAME"
     timer_path="$timer_root/systemd/$timer_name"
 
-    if [[ "$action" == "install" ]]; then
+    if [[ "$ACTION" == "install" ]]; then
         # Check if the systemd timer already exists
         if ! systemctl list-unit-files --type=timer | grep -q "$timer_name"; then
             logI "Creating systemd timer: $timer_name."
@@ -4234,7 +4210,7 @@ create_systemd_timer() {
 
         logI "Systemd timer $timer_name created."
 
-    elif [[ "$action" == "uninstall" ]]; then
+    elif [[ "$ACTION" == "uninstall" ]]; then
         logI "Removing systemd timer: $timer_name."
 
         if [[ "$DRY_RUN" == "true" ]]; then
@@ -4357,12 +4333,6 @@ get_man_file_array() {
 # shellcheck disable=SC2317
 install_man_pages() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
-    # Convert the string after '|' into an array
-    local -a args=()  # Ensure `args` is an array
-    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
-    # Reset the positional arguments to the parsed array
-    set -- "${args[@]}"
 
     local man_base_dir="/usr/share/man"
     local -a man_files
@@ -4383,7 +4353,7 @@ install_man_pages() {
         return 1
     fi
 
-    if [[ "$action" == "install" ]]; then
+    if [[ "$ACTION" == "install" ]]; then
         logI "Installing man pages."
         for man_file in "${man_files[@]}"; do
             debug_print "Processing $man_file" "$debug"
@@ -4429,7 +4399,7 @@ install_man_pages() {
             }
 
         done
-    elif [[ "$action" == "uninstall" ]]; then
+    elif [[ "$ACTION" == "uninstall" ]]; then
         logI "Uninstalling man pages."
         for man_file in "${man_files[@]}"; do
             debug_print "Removing $man_file" "$debug"
@@ -4437,7 +4407,7 @@ install_man_pages() {
             local filename="$man_file"
             local target_dir="${man_base_dir}/man${section}"
             local compressed_file="${target_dir}/${filename}.gz"
-            
+
             if [[ -f "$compressed_file" ]]; then
                 sudo rm "$compressed_file" || {
                     logE "Failed to remove $compressed_file"
@@ -4458,7 +4428,7 @@ install_man_pages() {
     }
 
     # Final success log
-    logI "Man pages ${action}ed successfully."
+    logI "Man pages ${ACTION}ed successfully."
 
     debug_end "$debug"
 }
@@ -4482,12 +4452,6 @@ install_man_pages() {
 # -----------------------------------------------------------------------------
 cleanup_files_in_directories() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
-    # Convert the string after '|' into an array
-    local -a args=()  # Ensure `args` is an array
-    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
-    # Reset the positional arguments to the parsed array
-    set -- "${args[@]}"
 
     local dest_root="$USER_HOME/$REPO_NAME"
     logI "Deleting local repository tree."
@@ -4527,19 +4491,18 @@ cleanup_files_in_directories() {
 # -----------------------------------------------------------------------------
 finish_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local action="${1:-install}"  # Default to "install" if no action is provided
 
     # Validate action
-    if [[ "$action" != "install" && "$action" != "uninstall" ]]; then
-        debug_print "Invalid action: $action. Must be 'install' or 'uninstall'." "$debug"
-        logE "Invalid action specified: $action. Use 'install' or 'uninstall'."
+    if [[ "$ACTION" != "install" && "$ACTION" != "uninstall" ]]; then
+        debug_print "Invalid action: $ACTION. Must be 'install' or 'uninstall'." "$debug"
+        logE "Invalid action specified: $ACTION. Use 'install' or 'uninstall'."
         debug_end "$debug"
         return 1
     fi
 
     # Adjust log and output messages based on action
     local action_message
-    if [[ "$action" == "install" ]]; then
+    if [[ "$ACTION" == "install" ]]; then
         action_message="Installation"
     else
         action_message="Uninstallation"
@@ -4552,7 +4515,7 @@ finish_script() {
     # Optionally clear the screen or display a message
     printf "%s complete: %s.\n" "$action_message" "$REPO_DISPLAY_NAME"
 
-    if [[ "$action" == "install" ]]; then
+    if [[ "$ACTION" == "install" ]]; then
     # Display follow-up instructions after install
     cat << EOF
 TODO:  Provide follow-up instructions after install
@@ -4592,13 +4555,6 @@ EOF
 # -----------------------------------------------------------------------------
 install_ap_popup() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    # Get action argument
-    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
-    # Convert the string after '|' into an array
-    local -a args=()  # Ensure `args` is an array
-    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
-    # Reset the positional arguments to the parsed array
-    set -- "${args[@]}"
 
     # Define the group of functions to install/uninstall
     local install_group=(
@@ -4622,17 +4578,17 @@ install_ap_popup() {
     )
 
     # Start the script
-    start_script "$action" "$debug"
+    start_script "$ACTION" "$debug"
 
     # Iterate over the group of functions and call them with the action and debug flag
-    if [[ "$action" == "install" ]]; then
+    if [[ "$ACTION" == "install" ]]; then
         local group_to_execute=()
         group_to_execute=("${install_group[@]}")
 
         for func in "${group_to_execute[@]}"; do
-            debug_print "Running $func() with action: '$action'" "$debug"
+            debug_print "Running $func() with action: '$ACTION'" "$debug"
             # Call the function with action and debug flag
-            "$func" "$action" "$debug"
+            "$func" "$ACTION" "$debug"
             local status=$?
 
             # Check if the function failed
@@ -4644,7 +4600,7 @@ install_ap_popup() {
                 debug_print "$func succeeded." "$debug"
             fi
         done
-    elif [[ "$action" == "uninstall" ]]; then
+    elif [[ "$ACTION" == "uninstall" ]]; then
         # Reverse the array for uninstall
         local group_to_execute=()
         mapfile -t group_to_execute < <(printf "%s\n" "${install_group[@]}" | tac)
@@ -4665,7 +4621,7 @@ install_ap_popup() {
             fi
 
             # Call the function with action and debug flag
-            "$func" "$action" "$debug"
+            "$func" "$ACTION" "$debug"
             local status=$?
 
             # Check if the function failed
@@ -4685,58 +4641,41 @@ install_ap_popup() {
     cleanup_files_in_directories "$debug"
 
     # Finish the script
-    finish_script "$action" "$debug"
+    finish_script "$ACTION" "$debug"
 
     debug_end "$debug"
     return 0
 }
 
 # -----------------------------------------------------------------------------
-# @brief Parses and separates an action (install/uninstall) and additional arguments.
-# @details This function iterates over the provided arguments to identify the
-#          action (either "install" or "uninstall") and separates any remaining
-#          arguments into a filtered list.
+# @brief Parses action and separates remaining arguments.
+# @details Identifies "install" or "uninstall" as the action and stores it in
+#          the global `ACTION` variable. Other arguments are returned for further
+#          processing.
 #
-# @param $@ The list of arguments to parse.
+# @param $@ List of arguments to parse.
 #
-# @global None.
+# @global ACTION Updated with the action ("install" or "uninstall") if found.
 #
-# @throws None.
-#
-# @return Outputs the action as the first part followed by a pipe (`|`) and the
-#         remaining arguments (if any).
-#
-# @example
-# parse_action_and_args install arg1 arg2
-# # Output: install|arg1 arg2
-#
-# parse_action_and_args uninstall
-# # Output: uninstall|
+# @return Outputs remaining arguments to stdout.
 # -----------------------------------------------------------------------------
 parse_action_and_args() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local -a remaining_args=()
 
-    local action=""  # To capture the action ("install" or "uninstall").
-    local args=()    # Array to hold the filtered (non-action) arguments.
-
-    # Iterate over the argument list.
     for arg in "$@"; do
         case "$arg" in
             install|uninstall)
-                action="$arg"  # Set the action if "install" or "uninstall".
+                ACTION="$arg"  # Update global ACTION variable
                 ;;
             *)
-                args+=("$arg")  # Add non-matching arguments to the args array.
+                remaining_args+=("$arg")
                 ;;
         esac
     done
 
-    # Output the action and the remaining arguments as separate values.
-    printf "%s|" "$action"       # Action as the first part (e.g., "install|").
-    printf "%q " "${args[@]}"    # Filtered arguments as the second part.
-    printf "\n"                  # Ensure a newline at the end of output.
-
     debug_end "$debug"
+    printf "%s\n" "${remaining_args[@]}"  # Return remaining arguments
 }
 
 ############
@@ -4746,15 +4685,11 @@ parse_action_and_args() {
 _main() {
     # Get debug flag
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    # Extract/remove action and reset remaining arguments
-    local parse_result=""; parse_result=$(parse_action_and_args "$@")
-    # Get action argument
-    local action=""; action="${parse_result%%|*}"  # $action = before the '|'
-    # Convert the string after '|' into an array
-    local -a args=()  # Ensure `args` is an array
-    IFS=' ' read -r -a args <<< "${parse_result#*|}"  # Split into an array
-    # Reset the positional arguments to the parsed array
-    set -- "${args[@]}"
+
+    # Call the function to parse action and update positional arguments
+    parse_action_and_args "$@"
+    # shellcheck disable=SC2154
+    set -- "${parsed_args[@]}"
 
     # Check and set up the environment
     enforce_sudo "$debug"              # Ensure proper privileges for script execution
@@ -4772,7 +4707,7 @@ _main() {
     print_version "$debug"             # Log the script version
 
     # Run installer steps
-    install_ap_popup "$action" "$debug"
+    install_ap_popup "$debug"
 
     debug_end "$debug"
     return 0
