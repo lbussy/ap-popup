@@ -1,0 +1,7 @@
+DEVICE         TYPE      STATE                   CONNECTION    
+wlan1          wifi      connected               preconfigured 
+lo             loopback  connected (externally)  lo            
+wlan0          wifi      disconnected            --            
+p2p-dev-wlan0  wifi-p2p  disconnected            --            
+p2p-dev-wlan1  wifi-p2p  disconnected            --            
+eth0           ethernet  unavailable             --            

@@ -1,0 +1,17 @@
+ACTIVE  IN-USE  DEVICE  SSID          MODE   CHAN  RATE        SECURITY  SIGNAL  BARS  
+yes     *       wlan1   Bohica        Infra  40    540 Mbit/s  WPA2      72      ▂▄▆_  
+no              wlan0   Bohica-IoT    Infra  7     260 Mbit/s  WPA2      100     ▂▄▆█  
+no              wlan0   Bohica-Guest  Infra  7     260 Mbit/s  WPA2      100     ▂▄▆█  
+no              wlan0   Bohica        Infra  7     260 Mbit/s  WPA2      100     ▂▄▆█  
+no              wlan0   Bohica        Infra  40    540 Mbit/s  WPA2      89      ▂▄▆█  
+no              wlan0   Bohica-Guest  Infra  40    540 Mbit/s  WPA2      89      ▂▄▆█  
+no              wlan0   Bohica        Infra  7     260 Mbit/s  WPA2      87      ▂▄▆█  
+no              wlan0   Bohica-Guest  Infra  7     260 Mbit/s  WPA2      85      ▂▄▆█  
+no              wlan0   Bohica-IoT    Infra  7     260 Mbit/s  WPA2      85      ▂▄▆█  
+no              wlan0   Bohica-IoT    Infra  7     260 Mbit/s  WPA2      75      ▂▄▆_  
+no              wlan0   Bohica-Guest  Infra  7     260 Mbit/s  WPA2      75      ▂▄▆_  
+no              wlan0   Bohica        Infra  7     260 Mbit/s  WPA2      72      ▂▄▆_  
+no              wlan0   Bohica        Infra  40    540 Mbit/s  WPA2      52      ▂▄__  
+no              wlan0   Bohica-Guest  Infra  40    540 Mbit/s  WPA2      52      ▂▄__  
+no              wlan0   Bohica        Infra  40    540 Mbit/s  WPA2      32      ▂▄__  
+no              wlan0   Bohica-Guest  Infra  40    540 Mbit/s  WPA2      30      ▂___  

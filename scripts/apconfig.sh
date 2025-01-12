@@ -1237,7 +1237,7 @@ pause() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     printf "Press any key to continue.\n"
-    read -n 1 -sr key < /dev/tty || true
+    read -n 1 -sr key || true
     printf "\n"
     debug_print "$key" "$debug"
 
@@ -2071,7 +2071,7 @@ display_menu() {
 
     # Read user choice
     printf "\nEnter your choice: "
-    read -n 1 -sr choice < /dev/tty || true
+    read -n 1 -sr choice || true
     printf "%s\n" "$choice"
 
     # Validate input
@@ -2391,23 +2391,28 @@ usage() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 setup_wifi_network() {
-    local wifi_list=()
     local selection=""
+    local wifi_list=()
     local attempts=0
     local max_attempts=5
 
-    if [ ! -f "$CONFIG_FILE" ]; then
-        logW "Config file not yet present, install script from menu first."
-        return
-    fi
+    printf "%s%sAdd or Modify a WiFi Network%s\n" "$FGYLW" "$BOLD" "$RESET"
+    printf "\nScanning for available WiFi networks on %s.\n" "$WIFI_INTERFACE"
 
-    printf "%s%sAdd or modify a WiFi Network%s\n" "$FGYLW" "$BOLD" "$RESET"
-    printf "\nScanning for available WiFi networks.\n"
-
-    # Scan for WiFi networks, retrying if the device is busy
+    # Scan for WiFi networks using nmcli
     while [ "$attempts" -lt "$max_attempts" ]; do
-        wifi_list=()
-        mapfile -t wifi_list < <(iw dev "$WIFI_INTERFACE" scan ap-force | grep -E "SSID:" | sed 's/SSID: //')
+        # Use nmcli to list available WiFi networks, filtering valid SSIDs
+        mapfile -t wifi_list < <(
+            nmcli --color yes device wifi list ifname "$WIFI_INTERFACE" |
+            awk 'NR > 1 {
+                # Handle leading * for active network
+                offset = ($1 == "*" ? 1 : 0)
+                ssid = $(2 + offset)
+                if (ssid != "--") {
+                    print NR-1, $0
+                }
+            }'
+        )
 
         if [ "${#wifi_list[@]}" -gt 0 ]; then
             break
@@ -2426,35 +2431,52 @@ setup_wifi_network() {
     if [ "${#wifi_list[@]}" -eq 0 ]; then
         printf "No WiFi networks detected. There may be a temporary issue with the device or signal.\n"
         printf "Press any key (or wait 5 seconds) to continue.\n"
-        read -n 1 -t 5 -sr < /dev/tty || true
+        read -n 1 -t 5 -sr || true
         return
     fi
 
+    # Display the WiFi networks with an index
     printf "\nDetected WiFi networks:\n"
+    printf "%-5s%-s\n" "Index" "Network Details"
+    printf "%-5s%-s\n" "-----" "---------------------------------------------"
     for i in "${!wifi_list[@]}"; do
-        local trimmed_entry; trimmed_entry=$(printf "%s" "${wifi_list[i]}" | xargs)
-        printf "%d)\t%s\n" $((i + 1)) "$trimmed_entry"
+        printf "%s\n" "${wifi_list[i]}"
     done
-    printf "%d)\tCancel\n" "$(( ${#wifi_list[@]} + 1 ))"
+
+    # Print the Cancel option
+    printf "0    Cancel\n"
 
     # User selection
     while true; do
-        printf "\nEnter the number corresponding to the network you wish to configure:\n"
-        read -n 1 -sr selection < /dev/tty || true
+        printf "\nEnter the number corresponding to the network you\nwish to configure (0 to cancel): "
+        read -r selection < /dev/tty
 
-        if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "$(( ${#wifi_list[@]} + 1 ))" ]; then
-            if [ "$selection" -eq "$(( ${#wifi_list[@]} + 1 ))" ]; then
+        # Validate input
+        if [[ "$selection" =~ ^[0-9]+$ ]]; then
+            if [ "$selection" -eq 0 ]; then
                 printf "\nOperation canceled.\n"
                 return
-            else
-                update_wifi_profile "${wifi_list[$((selection - 1))]}"
+            elif [ "$selection" -ge 1 ] && [ "$selection" -le "${#wifi_list[@]}" ]; then
+                # Extract the SSID from the selected entry
+                local selected_entry="${wifi_list[$((selection - 1))]}"
+                local ssid
+                ssid=$(echo "$selected_entry" | awk '{
+                    # Handle leading * for active network
+                    offset = ($2 == "*" ? 1 : 0)
+                    print $(3 + offset)
+                }')
+
+                # Call the function with the SSID
+                update_wifi_profile "$ssid"
                 return
+            else
+                printf "Invalid selection. Please enter a number between 0 and %d.\n" "${#wifi_list[@]}"
             fi
         elif [[ -z "$selection" ]]; then
             printf "No selection, exiting to menu.\n"
             return
         else
-            logW "Invalid selection. Please try again."
+            printf "Invalid input. Please enter a valid number.\n"
         fi
     done
 }
@@ -2497,13 +2519,7 @@ switch_between_wifi_and_ap() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 update_access_point_ip() {
-    if [ ! -f "$CONFIG_FILE" ]; then
-        # clear
-        logW "Config file not yet present, install script from menu first."
-        return
-    fi
-    # clear
-
+    clear
     local choice third_octet fourth_octet base new_ip new_gateway confirm
 
     # Display current AP configuration
@@ -2519,7 +2535,7 @@ Choose a new network:
 
 EOF
 
-    read -n 1 -t 5 -sr choice < /dev/tty || true
+    read -n 1 -t 5 -sr choice || true
     printf "\n"
     case "$choice" in
         1) base="192.168." ;;
@@ -2529,11 +2545,11 @@ EOF
     esac
 
     printf "\nEnter the third octet (0-255):\n"
-    read -r third_octet < /dev/tty
+    read -r third_octet
     if ! validate_host_number "$third_octet" 255; then return; fi
 
     printf "\nEnter the fourth octet (0-253):\n"
-    read -r fourth_octet < /dev/tty
+    read -r fourth_octet
     if ! validate_host_number "$fourth_octet" 253; then return; fi
 
     third_octet=$((10#$third_octet))
@@ -2555,7 +2571,7 @@ EOF
 EOF
 
     printf "Apply these changes? (y/N): "
-    read -n 1 -t 5 -sr confirm < /dev/tty || true
+    read -n 1 -t 5 -sr confirm || true
     printf "\n"
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
         sed -i "s|^AP_CIDR=.*|AP_CIDR=\"$new_ip\"|" "$CONFIG_FILE"
@@ -2590,7 +2606,7 @@ update_access_point_ssid() {
 
 Enter new SSID (1-32 characters, no leading/trailing spaces, Enter to keep current):
 EOF
-    read -r new_ssid < /dev/tty
+    read -r new_ssid
 
     # Trim and validate SSID
     new_ssid=$(printf "%s" "$new_ssid" | xargs | sed -e 's/^"//' -e 's/"$//')
@@ -2615,7 +2631,7 @@ EOF
 
 Enter new password (8-63 printable characters with no leading/trailing spaces, Enter to keep current):
 EOF
-    read -r new_pw < /dev/tty
+    read -r new_pw
 
     # Trim and validate password
     new_pw=$(printf "%s" "$new_pw" | xargs)
@@ -2658,7 +2674,7 @@ update_hostname() {
 Enter a new hostname (Enter to keep current):
 EOF
 
-    read -r new_hostname < /dev/tty || true
+    read -r new_hostname || true
 
     if [ -n "$new_hostname" ] && [ "$new_hostname" != "$current_hostname" ]; then
         # Validate the new hostname
@@ -2720,7 +2736,7 @@ update_wifi_profile() {
         # Existing profile found
         printf "An existing profile for this SSID was found: %s\n" "$existing_profile"
         printf "%sEnter the new password for the network (or press Enter to skip updating):%s\n" "${FGYLW}" "${RESET}"
-        read -r password < /dev/tty
+        read -r password
 
         if [ -n "$password" ] && [ "${#password}" -ge 8 ]; then
             nmcli connection modify "$existing_profile" wifi-sec.psk "$password"
@@ -2743,7 +2759,7 @@ update_wifi_profile() {
         # No existing profile found, create a new one
         printf "No existing profile found for %s.\n" "$ssid"
         printf "%sEnter the password for the network (minimum 8 characters):%s\n" "${FGYLW}" "${RESET}"
-        read -r password < /dev/tty
+        read -r password
 
         if [ -n "$password" ] && [ "${#password}" -ge 8 ]; then
             printf "Creating a new profile and attempting to connect to %s.\n" "$ssid"
@@ -2993,7 +3009,7 @@ _main() {
     check_release "$debug"             # Check Raspbian OS version compatibility
 
     load_config "$@" "$debug"          # Load configuration file
-    do_menu "$@" "$debug"              # Display main menu
+    # do_menu "$@" "$debug"              # Display main menu
 
     debug_end "$debug"
     return 0
