@@ -2365,120 +2365,172 @@ usage() {
 ############
 
 # -----------------------------------------------------------------------------
-# @brief Configure a new WiFi network or modify an existing one.
-# @details Scans for available WiFi networks, allowing the user to add a new
-#          network or change the password for an existing one. Handles retries
-#          if the WiFi device is busy and validates user input for network selection.
+# @brief Populate Wi-Fi network data.
+# @details Extracts Wi-Fi network information using nmcli, filters out entries
+#          with blank SSID, and returns the network data as an indexed array.
+# -----------------------------------------------------------------------------
+populate_wifi_networks() {
+    local wifi_info
+    wifi_info=$(nmcli -t -f all --color no dev wifi list 2>/dev/null)
+
+    if [[ $? -ne 0 ]]; then
+        printf "%s\n" "Error: Failed to execute 'nmcli'. Ensure NetworkManager is running and you have the necessary permissions." >&2
+        exit 1
+    fi
+
+    if [[ -z "$wifi_info" ]]; then
+        printf "%s\n" "No Wi-Fi networks detected. Ensure Wi-Fi is enabled and try again." >&2
+        exit 0
+    fi
+
+    wifi_info="${wifi_info//\\:/-}"
+
+    local filtered_wifi_info
+    filtered_wifi_info=$(echo "$wifi_info" | awk -F ':' '$2 != ""')
+
+    IFS=$'\n' read -rd '' -a wifi_entries <<<"$filtered_wifi_info" || true
+
+    local index=1
+    declare -A ssid_to_best_signal
+    declare -A ssid_to_entry
+
+    for entry in "${wifi_entries[@]}"; do
+        IFS=":" read -r -a fields <<<"$entry"
+        local ssid="${fields[1]}"
+        local signal="${fields[8]}"
+
+        if $verbose; then
+            wifi_networks[$index]="$entry"
+            ((index++))
+        else
+            if [[ -z "${ssid_to_best_signal[$ssid]}" || $signal -gt ${ssid_to_best_signal[$ssid]} ]]; then
+                ssid_to_best_signal[$ssid]=$signal
+                ssid_to_entry[$ssid]=$entry
+            fi
+        fi
+    done
+
+    if ! $verbose; then
+        for ssid in "${!ssid_to_entry[@]}"; do
+            wifi_networks[$index]="${ssid_to_entry[$ssid]}"
+            ((index++))
+        done
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Display Wi-Fi networks in a formatted table.
+# @details Outputs a table of Wi-Fi networks with selected columns and a 
+#          numeric index for user selection. Handles empty network list.
+# -----------------------------------------------------------------------------
+display_wifi_networks() {
+    local columns_to_display=(1 8 9 10) # SSID, SIGNAL, BARS, SECURITY
+    local header="NAME:SSID:SSID-HEX:BSSID:MODE:CHAN:FREQ:RATE:SIGNAL:BARS:SECURITY:WPA-FLAGS:RSN-FLAGS:DEVICE:ACTIVE:IN-USE:DBUS-PATH"
+
+    if [[ ${#wifi_networks[@]} -eq 0 ]]; then
+        printf "%s\n" "No Wi-Fi networks detected." >&2
+        exit 0
+    fi
+
+    IFS=":" read -r -a full_headers <<<"$header"
+    local selected_headers=()
+    for index in "${columns_to_display[@]}"; do
+        if [[ $index -lt ${#full_headers[@]} ]]; then
+            selected_headers+=("${full_headers[index]}")
+        else
+            printf "%s\n" "Error: Invalid column index $index in columns_to_display." >&2
+            exit 1
+        fi
+    done
+
+    local num_columns=${#columns_to_display[@]}
+    local max_widths=()
+    for ((i = 0; i < num_columns; i++)); do
+        max_widths[i]=${#selected_headers[i]} 
+    done
+
+    for key in "${!wifi_networks[@]}"; do
+        IFS=":" read -r -a fields <<<"${wifi_networks[$key]}"
+        for ((i = 0; i < num_columns; i++)); do
+            local column_index=${columns_to_display[i]}
+            local field_length=${#fields[column_index]}
+            if ((field_length > max_widths[i])); then
+                max_widths[i]=$field_length
+            fi
+        done
+    done
+
+    printf "%6s  " "CHOICE"
+    for ((i = 0; i < num_columns; i++)); do
+        printf "%-*s  " "${max_widths[i]}" "${selected_headers[i]}"
+    done
+    printf "\n"
+
+    for key in $(printf "%s\n" "${!wifi_networks[@]}" | sort -n); do
+        IFS=":" read -r -a fields <<<"${wifi_networks[$key]}"
+
+        printf "%6s  " "$key"
+        for ((i = 0; i < num_columns; i++)); do
+            local column_index=${columns_to_display[i]}
+            printf "%-*s  " "${max_widths[i]}" "${fields[column_index]}"
+        done
+        printf "\n"
+    done
+}
+
+# -----------------------------------------------------------------------------
+# @brief Prompt user to select a Wi-Fi network by index.
+# @details Allows the user to enter an index corresponding to a Wi-Fi network.
+#          Pressing Enter or selecting "0" returns a blank value.
 #
-# @global CONFIG_FILE Path to the configuration file for WiFi settings.
-# @global WIFI_INTERFACE The network interface used for WiFi scanning.
-# @global FGYLW Terminal formatting for yellow foreground.
-# @global BOLD Terminal formatting for bold text.
-# @global RESET Terminal formatting reset sequence.
+# @return The SSID of the selected network or blank for "0" or Enter.
+# -----------------------------------------------------------------------------
+select_wifi_network() {
+    local choice
+    while :; do
+        read -rp "Select a network by index (or press Enter to exit): " choice
+
+        if [[ -z "$choice" ]]; then
+            printf "%s\n" ""
+            return
+        fi
+
+        if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 0 && choice <= ${#wifi_networks[@]})); then
+            break
+        else
+            printf "%s\n" "Invalid selection. Please enter a number between 0 and ${#wifi_networks[@]}." >&2
+        fi
+    done
+
+    if [[ -z "$choice" || "$choice" -eq 0 ]]; then
+        printf "%s\n" ""
+    else
+        IFS=":" read -r -a selected_fields <<<"${wifi_networks[$choice]}"
+        printf "%s\n" "${selected_fields[1]}"
+    fi
+}
+
+# -----------------------------------------------------------------------------
+# @brief Set up and select a Wi-Fi network.
+# @details Orchestrates the process of populating Wi-Fi data, displaying
+#          available networks, and allowing the user to select one. Optionally,
+#          prepares for subsequent actions with the selected SSID.
 #
-# @return None
-# @throws Logs an error and returns if the WiFi device is unavailable or no
-#         networks are detected.
-#
-# @example
-# setup_wifi_network
-# Output:
-#   Detected WiFi networks:
-#   1) Network_A
-#   2) Network_B
-#   .
-#   Enter the number corresponding to the network you wish to configure:
+# @return The selected SSID is output for further processing.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 setup_wifi_network() {
-    local selection=""
-    local wifi_list=()
-    local attempts=0
-    local max_attempts=5
+    local selected_ssid
 
-    printf "%s%sAdd or Modify a WiFi Network%s\n" "$FGYLW" "$BOLD" "$RESET"
-    printf "\nScanning for available WiFi networks on %s.\n" "$WIFI_INTERFACE"
+    populate_wifi_networks
+    display_wifi_networks
 
-    # Scan for WiFi networks using nmcli
-    while [ "$attempts" -lt "$max_attempts" ]; do
-        # Use nmcli to list available WiFi networks, filtering valid SSIDs
-        mapfile -t wifi_list < <(
-            nmcli --color yes device wifi list ifname "$WIFI_INTERFACE" |
-            awk 'NR > 1 {
-                # Handle leading * for active network
-                offset = ($1 == "*" ? 1 : 0)
-                ssid = $(2 + offset)
-                if (ssid != "--") {
-                    print NR-1, $0
-                }
-            }'
-        )
-
-        if [ "${#wifi_list[@]}" -gt 0 ]; then
-            break
-        elif [ "$attempts" -ge "$((max_attempts - 1))" ]; then
-            logE "WiFi device is unavailable. Unable to scan for networks at this time." \
-                "Please check your device and try again later."
-            return
-        else
-            printf "WiFi device is busy or temporarily unavailable. Retrying in 2 seconds.\n"
-            attempts=$((attempts + 1))
-            sleep 2
-        fi
-    done
-
-    # Display scanned networks
-    if [ "${#wifi_list[@]}" -eq 0 ]; then
-        printf "No WiFi networks detected. There may be a temporary issue with the device or signal.\n"
-        printf "Press any key (or wait 5 seconds) to continue.\n"
-        read -n 1 -t 5 -sr || true
-        return
+    # Call the function with the SSID
+    if [[ -z "$selected_ssid" ]]; then
+        printf "No SSID selected.\n"
+    else
+        update_wifi_profile "$selected_ssid"
     fi
-
-    # Display the WiFi networks with an index
-    printf "\nDetected WiFi networks:\n"
-    printf "%-5s%-s\n" "Index" "Network Details"
-    printf "%-5s%-s\n" "-----" "---------------------------------------------"
-    for i in "${!wifi_list[@]}"; do
-        printf "%s\n" "${wifi_list[i]}"
-    done
-
-    # Print the Cancel option
-    printf "0    Cancel\n"
-
-    # User selection
-    while true; do
-        printf "\nEnter the number corresponding to the network you\nwish to configure (0 to cancel): "
-        read -r selection < /dev/tty
-
-        # Validate input
-        if [[ "$selection" =~ ^[0-9]+$ ]]; then
-            if [ "$selection" -eq 0 ]; then
-                printf "\nOperation canceled.\n"
-                return
-            elif [ "$selection" -ge 1 ] && [ "$selection" -le "${#wifi_list[@]}" ]; then
-                # Extract the SSID from the selected entry
-                local selected_entry="${wifi_list[$((selection - 1))]}"
-                local ssid
-                ssid=$(echo "$selected_entry" | awk '{
-                    # Handle leading * for active network
-                    offset = ($2 == "*" ? 1 : 0)
-                    print $(3 + offset)
-                }')
-
-                # Call the function with the SSID
-                update_wifi_profile "$ssid"
-                return
-            else
-                printf "Invalid selection. Please enter a number between 0 and %d.\n" "${#wifi_list[@]}"
-            fi
-        elif [[ -z "$selection" ]]; then
-            printf "No selection, exiting to menu.\n"
-            return
-        else
-            printf "Invalid input. Please enter a valid number.\n"
-        fi
-    done
 }
 
 # -----------------------------------------------------------------------------
