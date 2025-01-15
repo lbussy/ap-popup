@@ -2049,6 +2049,7 @@ MAIN_MENU=(
 #
 # @return Executes the corresponding function for the selected menu item.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 display_menu() {
     # Debug declarations
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
@@ -2105,6 +2106,7 @@ display_menu() {
 #
 # @return Calls `display_menu` with the main menu array.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 display_main_menu() {
     # Debug declarations
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
@@ -2154,6 +2156,7 @@ display_sub_menu() {
 # Execute the menu
 #   do_menu "$debug"
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 do_menu() {
     # Debug declarations
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
@@ -2369,6 +2372,7 @@ usage() {
 # @details Extracts Wi-Fi network information using nmcli, filters out entries
 #          with blank SSID, and returns the network data as an indexed array.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 populate_wifi_networks() {
     local wifi_info
     wifi_info=$(nmcli -t -f all --color no dev wifi list 2>/dev/null)
@@ -2423,6 +2427,7 @@ populate_wifi_networks() {
 # @details Outputs a table of Wi-Fi networks with selected columns and a 
 #          numeric index for user selection. Handles empty network list.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 display_wifi_networks() {
     local columns_to_display=(1 8 9 10) # SSID, SIGNAL, BARS, SECURITY
     local header="NAME:SSID:SSID-HEX:BSSID:MODE:CHAN:FREQ:RATE:SIGNAL:BARS:SECURITY:WPA-FLAGS:RSN-FLAGS:DEVICE:ACTIVE:IN-USE:DBUS-PATH"
@@ -2485,6 +2490,7 @@ display_wifi_networks() {
 #
 # @return The SSID of the selected network or blank for "0" or Enter.
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
 select_wifi_network() {
     local choice
     while :; do
