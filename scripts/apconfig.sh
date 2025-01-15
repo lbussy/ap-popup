@@ -2374,10 +2374,16 @@ usage() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 populate_wifi_networks() {
-    local wifi_info
-    wifi_info=$(nmcli -t -f all --color no dev wifi list 2>/dev/null)
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
-    if [[ $? -ne 0 ]]; then
+    local wifi_info retval
+    clear
+    printf "%s%sAdd or modify a WiFi Network%s\n" "$FGYLW" "$BOLD" "$RESET"
+    printf "\nScanning for available WiFi networks, please wait.\n"
+    wifi_info=$(nmcli -t -f all --color no dev wifi list 2>/dev/null)
+    retval=$?
+
+    if [[ $retval -ne 0 ]]; then
         printf "%s\n" "Error: Failed to execute 'nmcli'. Ensure NetworkManager is running and you have the necessary permissions." >&2
         exit 1
     fi
@@ -2403,8 +2409,8 @@ populate_wifi_networks() {
         local ssid="${fields[1]}"
         local signal="${fields[8]}"
 
-        if $verbose; then
-            wifi_networks[$index]="$entry"
+        if [[ "$debug" == "debug" ]]; then
+            wifi_networks[index]="$entry"
             ((index++))
         else
             if [[ -z "${ssid_to_best_signal[$ssid]}" || $signal -gt ${ssid_to_best_signal[$ssid]} ]]; then
@@ -2414,12 +2420,13 @@ populate_wifi_networks() {
         fi
     done
 
-    if ! $verbose; then
+    if [[ ! $debug == "debug" ]]; then
         for ssid in "${!ssid_to_entry[@]}"; do
-            wifi_networks[$index]="${ssid_to_entry[$ssid]}"
+            wifi_networks[index]="${ssid_to_entry[$ssid]}"
             ((index++))
         done
     fi
+        debug_end "$debug"
 }
 
 # -----------------------------------------------------------------------------
@@ -2429,6 +2436,8 @@ populate_wifi_networks() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 display_wifi_networks() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
     local columns_to_display=(1 8 9 10) # SSID, SIGNAL, BARS, SECURITY
     local header="NAME:SSID:SSID-HEX:BSSID:MODE:CHAN:FREQ:RATE:SIGNAL:BARS:SECURITY:WPA-FLAGS:RSN-FLAGS:DEVICE:ACTIVE:IN-USE:DBUS-PATH"
 
@@ -2481,6 +2490,7 @@ display_wifi_networks() {
         done
         printf "\n"
     done
+    debug_end "$debug"
 }
 
 # -----------------------------------------------------------------------------
@@ -2492,6 +2502,7 @@ display_wifi_networks() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 select_wifi_network() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local choice
     while :; do
         read -rp "Select a network by index (or press Enter to exit): " choice
@@ -2514,6 +2525,7 @@ select_wifi_network() {
         IFS=":" read -r -a selected_fields <<<"${wifi_networks[$choice]}"
         printf "%s\n" "${selected_fields[1]}"
     fi
+    debug_end "$debug"
 }
 
 # -----------------------------------------------------------------------------
@@ -2526,17 +2538,22 @@ select_wifi_network() {
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
 setup_wifi_network() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local selected_ssid
 
-    populate_wifi_networks
-    display_wifi_networks
+    populate_wifi_networks "$debug"
+    display_wifi_networks "$debug"
+    selected_ssid=$(select_wifi_network "$debug")
 
     # Call the function with the SSID
     if [[ -z "$selected_ssid" ]]; then
         printf "No SSID selected.\n"
     else
-        update_wifi_profile "$selected_ssid"
+        update_wifi_profile "$selected_ssid" "$debug"
     fi
+
+    debug_end "$debug"
+    return 0
 }
 
 # -----------------------------------------------------------------------------
@@ -3067,7 +3084,8 @@ _main() {
     check_release "$debug"             # Check Raspbian OS version compatibility
 
     load_config "$@" "$debug"          # Load configuration file
-    # do_menu "$@" "$debug"              # Display main menu
+    setup_wifi_network "$debug" 
+    #do_menu "$@" "$debug"              # Display main menu
 
     debug_end "$debug"
     return 0
