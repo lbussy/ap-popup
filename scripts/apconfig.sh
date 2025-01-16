@@ -2093,7 +2093,7 @@ MENU_ITEMS["update_access_point_ip"]="Update Access Point IP"
 MENU_ITEMS["update_access_point_ssid"]="Change the Pop-Up AP SSID or Password"
 MENU_ITEMS["switch_between_wifi_and_ap"]="Live Switch between WiFi Connection and Access Point"
 MENU_ITEMS["run_ap_popup"]="Run AP Pop-Up Now (force check)"
-MENU_ITEMS["install_repo_script"]="Upgrade AP Pop-Up"
+MENU_ITEMS["execute_repo_script"]="Upgrade AP Pop-Up"
 
 # -----------------------------------------------------------------------------
 # @var MAIN_MENU
@@ -2116,7 +2116,7 @@ MAIN_MENU=(
     "update_access_point_ssid"
     "switch_between_wifi_and_ap"
     "run_ap_popup"
-    "install_repo_script"
+    "execute_repo_script"
 )
 
 # -----------------------------------------------------------------------------
@@ -2593,6 +2593,7 @@ display_wifi_networks() {
 select_wifi_network() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local choice
+
     while :; do
         read -rp "Select a network by index (or press Enter to exit): " choice
 
@@ -3170,10 +3171,10 @@ load_config() {
 # @return None.
 #
 # @example
-# DRY_RUN=true install_repo_script "debug"
+# DRY_RUN=true execute_repo_script "debug"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
-install_repo_script() {
+execute_repo_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     local script_name="install.sh"
