@@ -59,8 +59,8 @@ set +o noclobber
 ############
 
 # -----------------------------------------------------------------------------
-# @details This script uses configuration variables for setting up the Access 
-#          Point. Defaults are declared below and can be overridden by sourcing 
+# @details This script uses configuration variables for setting up the Access
+#          Point. Defaults are declared below and can be overridden by sourcing
 #          a configuration file (e.g., /etc/appop.conf).
 #
 # @section Default Variables
@@ -81,7 +81,7 @@ set +o noclobber
 #
 # @var AP_PASSWORD
 # @brief Access Point password.
-# @details The password required to connect to the Access Point. Ensure this 
+# @details The password required to connect to the Access Point. Ensure this
 #          value meets your security requirements.
 # @default "1234567890"
 #
@@ -171,7 +171,7 @@ fi
 declare REPO_ORG="${REPO_ORG:-lbussy}"
 declare REPO_NAME="${REPO_NAME:-ap-popup}"
 declare REPO_DISPLAY_NAME="${REPO_DISPLAY_NAME:-AP Pop-Up}"
-declare REPO_BRANCH="${REPO_BRANCH:-main}"
+declare REPO_BRANCH="${REPO_BRANCH:-test_apconfig}"
 declare GIT_TAG="${GIT_TAG:-1.0.0}"
 declare SEM_VER="${SEM_VER:-${GIT_TAG}-${REPO_BRANCH}}"
 declare GIT_RAW="${GIT_RAW:-"https://raw.githubusercontent.com/$REPO_ORG/$REPO_NAME"}"
@@ -1860,6 +1860,64 @@ init_colors() {
 ############
 
 # -----------------------------------------------------------------------------
+# @brief Execute a new shell operation (departs this script).
+# @details Executes or simulates a shell command based on the DRY_RUN flag.
+#          Supports optional debugging to trace the execution process.
+#
+# @param $1 Name of the operation or process (for reference in logs).
+# @param $2 The shell command to execute.
+# @param $3 Optional debug flag ("debug" to enable debug output).
+#
+# @global FUNCNAME Used to fetch the current and caller function names.
+# @global BASH_LINENO Used to fetch the calling line number.
+# @global DRY_RUN When set, simulates command execution instead of running it.
+#
+# @throws Exits with a non-zero status if the command execution fails.
+#
+# @return None.
+#
+# @example
+# DRY_RUN=true exec_new_shell "ListFiles" "ls -l" "debug"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+exec_new_shell() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    local exec_name="${1:-Unnamed Operation}"
+    local exec_process="${2:-true}"
+
+    # Debug information
+    debug_print "exec_name: $exec_name" "$debug"
+    debug_print " exec_process: $exec_process" "$debug"
+
+    # Simulate command execution if DRY_RUN is enabled
+    if [[ -n "$DRY_RUN" ]]; then
+        printf "[✔] Simulating: '%s'.\n" "$exec_process"
+            debug_end "$debug"
+        exit_script 0 "$debug"
+    fi
+
+    # Validate the command
+    if [[ "$exec_process" == "true" || "$exec_process" == "" ]]; then
+        printf "[✔] Running: '%s'.\n" "$exec_process"
+            debug_end "$debug"
+        exec true
+    elif ! command -v "${exec_process%% *}" >/dev/null 2>&1; then
+        warn "'$exec_process' is not a valid command or executable."
+            debug_end "$debug"
+        die 1 "Invalid command: '$exec_process'"
+    else
+        # Execute the actual command
+        printf "[✔] Running: '%s'.\n" "$exec_process"
+        debug_print "Executing command: '$exec_process' in function '$func_name()' at line ${LINENO}." "$debug"
+        exec $exec_process || die 1 "Command '${exec_process}' failed"
+    fi
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # @brief Executes a command in a separate Bash process.
 # @details This function manages the execution of a shell command, handling the
 #          display of status messages. It supports dry-run mode, where the
@@ -2009,7 +2067,7 @@ MENU_ITEMS["update_access_point_ip"]="Update Access Point IP"
 MENU_ITEMS["update_access_point_ssid"]="Change the Pop-Up AP SSID or Password"
 MENU_ITEMS["switch_between_wifi_and_ap"]="Live Switch between WiFi Connection and Access Point"
 MENU_ITEMS["run_ap_popup"]="Run AP Pop-Up Now (force check)"
-MENU_ITEMS["exec_upgrade"]="Upgrade AP Pop-Up"
+MENU_ITEMS["install_repo_script"]="Upgrade AP Pop-Up"
 
 # -----------------------------------------------------------------------------
 # @var MAIN_MENU
@@ -2024,6 +2082,7 @@ MENU_ITEMS["exec_upgrade"]="Upgrade AP Pop-Up"
 #     "display_sub_menu"
 # )
 # -----------------------------------------------------------------------------
+# shellcheck disable=SC2034
 MAIN_MENU=(
     "setup_wifi_network"
     "update_hostname"
@@ -2031,13 +2090,13 @@ MAIN_MENU=(
     "update_access_point_ssid"
     "switch_between_wifi_and_ap"
     "run_ap_popup"
-    "exec_upgrade"
+    "install_repo_script"
 )
 
 # -----------------------------------------------------------------------------
 # @brief Displays a menu based on the given menu array.
 # @details The menu items are numbered sequentially, and the user is prompted
-#          for input to select an option.
+#          for input to select an option. Pressing Enter exits the menu.
 #
 # @param $1 Array of menu keys to display.
 # @param $2 Debug flag for optional debug output.
@@ -2059,8 +2118,9 @@ display_menu() {
     local menu_array=("${!1}")  # Array of menu keys to display
 
     # Display the menu header
-    printf "%s\n\n" "$MENU_HEADER"
-    printf "Please select an option:\n\n"
+    printf "%b%b%s%b\n\n" "$BOLD" "$FGGLD" "$MENU_HEADER" "$RESET"
+
+    printf "%bPlease select an option:%b\n\n" "$BOLD" "$RESET"
 
     # Display the menu items
     for func in "${menu_array[@]}"; do
@@ -2068,23 +2128,19 @@ display_menu() {
         printf "%-4d%-30s\n" "$i" "${MENU_ITEMS[$func]}"
         ((i++))
     done
-    printf "%-4d%-30s\n" 0 "Exit"
 
     # Read user choice
-    printf "\nEnter your choice: "
-    read -n 1 -sr choice || true
+    printf "\nEnter your choice (or press Enter to exit): "
+    read -r choice || true
     printf "%s\n" "$choice"
 
     # Validate input
     if [[ -z "$choice" ]]; then
-        printf "No input provided. Please enter a valid choice.\n"
-        return
-    elif [[ "$choice" =~ ^[0-9]$ ]]; then
-        if [[ "$choice" -eq 0 ]]; then
-            printf "\nExiting.\n"
-            debug_end "$debug"
-            exit 0
-        elif [[ "$choice" -ge 1 && "$choice" -lt "$i" ]]; then
+        printf "\nExiting.\n"
+        debug_end "$debug"
+        exit 0
+    elif [[ "$choice" =~ ^[0-9]+$ ]]; then
+        if [[ "$choice" -ge 1 && "$choice" -lt "$i" ]]; then
             local func="${menu_array[choice-1]}"
             "$func" "$debug"
         else
@@ -2409,13 +2465,17 @@ populate_wifi_networks() {
         local ssid="${fields[1]}"
         local signal="${fields[8]}"
 
-        if [[ "$debug" == "debug" ]]; then
-            wifi_networks[index]="$entry"
-            ((index++))
-        else
-            if [[ -z "${ssid_to_best_signal[$ssid]}" || $signal -gt ${ssid_to_best_signal[$ssid]} ]]; then
-                ssid_to_best_signal[$ssid]=$signal
-                ssid_to_entry[$ssid]=$entry
+        # Ensure the SSID is not empty
+        if [[ -n "$ssid" ]]; then
+            if [[ "$debug" == "debug" ]]; then
+                wifi_networks[index]="$entry"
+                ((index++))
+            else
+                # Initialize the key in the associative array if not set
+                if [[ -z "${ssid_to_best_signal[$ssid]:-}" || $signal -gt ${ssid_to_best_signal[$ssid]} ]]; then
+                    ssid_to_best_signal[$ssid]=$signal
+                    ssid_to_entry[$ssid]=$entry
+                fi
             fi
         fi
     done
@@ -2431,7 +2491,7 @@ populate_wifi_networks() {
 
 # -----------------------------------------------------------------------------
 # @brief Display Wi-Fi networks in a formatted table.
-# @details Outputs a table of Wi-Fi networks with selected columns and a 
+# @details Outputs a table of Wi-Fi networks with selected columns and a
 #          numeric index for user selection. Handles empty network list.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
@@ -2460,7 +2520,7 @@ display_wifi_networks() {
     local num_columns=${#columns_to_display[@]}
     local max_widths=()
     for ((i = 0; i < num_columns; i++)); do
-        max_widths[i]=${#selected_headers[i]} 
+        max_widths[i]=${#selected_headers[i]}
     done
 
     for key in "${!wifi_networks[@]}"; do
@@ -2474,9 +2534,11 @@ display_wifi_networks() {
         done
     done
 
-    printf "%6s  " "CHOICE"
+    clear
+
+    printf "%s%6s%s  " "$BOLD" "CHOICE" "$RESET"
     for ((i = 0; i < num_columns; i++)); do
-        printf "%-*s  " "${max_widths[i]}" "${selected_headers[i]}"
+        printf "%s%-*s%s  " "$BOLD" "${max_widths[i]}" "${selected_headers[i]}" "$RESET"
     done
     printf "\n"
 
@@ -2490,6 +2552,7 @@ display_wifi_networks() {
         done
         printf "\n"
     done
+    printf "\n"
     debug_end "$debug"
 }
 
@@ -2832,12 +2895,12 @@ update_wifi_profile() {
         fi
     else
         # No existing profile found, create a new one
-        printf "No existing profile found for %s.\n" "$ssid"
+        printf "\nNo existing profile found for %s.\n" "$ssid"
         printf "%sEnter the password for the network (minimum 8 characters):%s\n" "${FGYLW}" "${RESET}"
         read -r password
 
         if [ -n "$password" ] && [ "${#password}" -ge 8 ]; then
-            printf "Creating a new profile and attempting to connect to %s.\n" "$ssid"
+            printf "\nCreating a new profile and attempting to connect to %s.\n" "$ssid"
             connection_status=$(nmcli device wifi connect "$ssid" password "$password" 2>&1)
             local retval=$?
             if [ "$retval" -eq 0 ]; then
@@ -3065,6 +3128,50 @@ load_config() {
     debug_end "$debug"
 }
 
+# -----------------------------------------------------------------------------
+# @brief Download and execute the install.sh script from the repo.
+# @details This function fetches the install.sh script from the 'scripts' folder
+#          in the repository using curl and executes it through sudo bash.
+#          Supports optional debugging to trace the execution process.
+#
+# @param $1 Optional debug flag ("debug" to enable debug output).
+#
+# @global GIT_RAW Base URL for raw GitHub content.
+# @global REPO_BRANCH The branch of the repository to target.
+#
+# @throws Exits with a non-zero status if the command execution fails.
+#
+# @return None.
+#
+# @example
+# DRY_RUN=true install_repo_script "debug"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+install_repo_script() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    local script_name="install.sh"
+    local script_url="${GIT_RAW}/${REPO_BRANCH}/scripts/${script_name}"
+
+    # Debug information
+    debug_print "Fetching script from URL: $script_url" "$debug"
+
+    # Validate the URL using exec_command
+    if exec_command "Validate URL" "curl --head --silent --fail $script_url" "$debug"; then
+        debug_print "URL is valid. Proceeding to download and execute." "$debug"
+    else
+        warn "Unable to get install script from Git repo $REPO_ORG/$REPO_NAME."
+    fi
+
+    # Construct the curl command to pipe the script to sudo bash
+    local exec_process="curl -fsSL $script_url | sudo bash"
+
+    # Execute the command using exec_new_shell
+    exec_new_shell "Install script" "$exec_process" "$debug"
+
+    debug_end "$debug"
+}
+
 ############
 ### Main Functions
 ############
@@ -3084,8 +3191,7 @@ _main() {
     check_release "$debug"             # Check Raspbian OS version compatibility
 
     load_config "$@" "$debug"          # Load configuration file
-    setup_wifi_network "$debug" 
-    #do_menu "$@" "$debug"              # Display main menu
+    do_menu "$@" "$debug"              # Display main menu
 
     debug_end "$debug"
     return 0
