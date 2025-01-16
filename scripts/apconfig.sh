@@ -1888,33 +1888,58 @@ exec_new_shell() {
 
     # Debug information
     debug_print "exec_name: $exec_name" "$debug"
-    debug_print " exec_process: $exec_process" "$debug"
+    debug_print "exec_process: $exec_process" "$debug"
 
-    # Simulate command execution if DRY_RUN is enabled
-    if [[ -n "$DRY_RUN" ]]; then
-        printf "[✔] Simulating: '%s'.\n" "$exec_process"
-            debug_end "$debug"
-        exit_script 0 "$debug"
+    # Basic status prefixes
+    local running_pre="Running"
+    local complete_pre="Complete"
+    local failed_pre="Failed"
+
+    # If DRY_RUN is enabled, show that in the prefix
+    if [[ "$DRY_RUN" == "true" ]]; then
+        running_pre+=" (dry)"
+        complete_pre+=" (dry)"
+        failed_pre+=" (dry)"
+    fi
+    running_pre+=":"
+    complete_pre+=":"
+    failed_pre+=":"
+
+    # Print ephemeral “Running” line
+    printf "%b[-]%b %s %s\n" "${FGGLD}" "${RESET}" "$running_pre" "$exec_name"
+    sleep 0.02  # Ensure visibility for fast commands
+
+    # Validate the command before executing
+    if ! command -v "${exec_process%% *}" >/dev/null 2>&1; then
+        # Move up & clear ephemeral “Running” line
+        printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
+        printf "%b[✘]%b %s %s.\n" "${FGRED}" "${RESET}" "$failed_pre" "$exec_name"
+        debug_end "$debug"
+        return 127
     fi
 
-    # Validate the command
-    if [[ "$exec_process" == "true" || "$exec_process" == "" ]]; then
-        printf "[✔] Running: '%s'.\n" "$exec_process"
-            debug_end "$debug"
-        exec true
-    elif ! command -v "${exec_process%% *}" >/dev/null 2>&1; then
-        warn "'$exec_process' is not a valid command or executable."
-            debug_end "$debug"
-        die 1 "Invalid command: '$exec_process'"
-    else
-        # Execute the actual command
-        printf "[✔] Running: '%s'.\n" "$exec_process"
-        debug_print "Executing command: '$exec_process' in function '$func_name()' at line ${LINENO}." "$debug"
-        exec $exec_process || die 1 "Command '${exec_process}' failed"
+    # 2) If DRY_RUN == "true", skip real exec
+    if [[ "$DRY_RUN" == "true" ]]; then
+        sleep 1
+        # Move up & clear ephemeral “Running” line before spawning a new shell
+        printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
+        printf "%b[✔]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
+        debug_end "$debug"
+        return 0
     fi
 
+    # Attempt to execute the command in a new shell
+    printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
+    printf "%b[✔]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
+    # shellcheck disable=SC2093
+    exec $exec_process
+
+    # If exec fails, handle the failure
+    local retval=$?
+    printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
+    printf "%b[✘]%b %s %s.\n" "${FGRED}" "${RESET}" "$failed_pre" "$exec_name"
     debug_end "$debug"
-    return 0
+    return "$retval"
 }
 
 # -----------------------------------------------------------------------------
@@ -1973,6 +1998,7 @@ exec_command() {
     # 2) If DRY_RUN == "true", skip real exec
     if [[ "$DRY_RUN" == "true" ]]; then
         # Move up & clear ephemeral line
+        sleep 1
         printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"
         printf "%b[✔]%b %s %s.\n" "${FGGRN}" "${RESET}" "$complete_pre" "$exec_name"
             debug_end "$debug"
@@ -2168,7 +2194,7 @@ display_main_menu() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Clear screen
-    clear
+    # DEBUG TODO clear
     # Display the menu
     display_menu MAIN_MENU[@] "$debug"
 
@@ -2192,7 +2218,7 @@ display_sub_menu() {
 
     while true; do
         # Clear screen
-        clear
+        # DEBUG TODO clear
         # Display the menu
         display_menu SUB_MENU[@] "$debug"
     done
