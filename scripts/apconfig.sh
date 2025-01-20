@@ -2087,13 +2087,22 @@ exit_script() {
 #          strings containing display names and the corresponding function to
 #          call.
 # -----------------------------------------------------------------------------
-MENU_ITEMS["setup_wifi_network"]="Setup New or Edit WiFi Connection"
-MENU_ITEMS["update_hostname"]="Change Hostname"
-MENU_ITEMS["update_access_point_ip"]="Update Access Point IP"
-MENU_ITEMS["update_access_point_ssid"]="Change the Pop-Up AP SSID or Password"
-MENU_ITEMS["switch_between_wifi_and_ap"]="Live Switch between WiFi Connection and Access Point"
-MENU_ITEMS["run_ap_popup"]="Run AP Pop-Up Now (force check)"
-MENU_ITEMS["execute_repo_script"]="Upgrade AP Pop-Up"
+# Live Switch between WiFi Connection and Access Point
+MENU_ITEMS["live_switch"]="Live Switch Modes"
+# Force Auto Negotiate
+MENU_ITEMS["force_auto_negotiate"]="Force Auto-Negotiate"
+# Access Point Configuration
+MENU_ITEMS["display_ap_menu"]="Update Access Point Configuration"
+MENU_ITEMS["update_ap_ssid"]="Update Access Point Name"
+MENU_ITEMS["update_ap_password"]="Update Access Point Password"
+MENU_ITEMS["update_ap_ip"]="Update Access Point IP Block"
+# WiFi Client Configuration:
+#   List connections and allow the user to select a connection to edit (1-9)
+#   (C)reate a new connection
+#   Change (P)riority
+MENU_ITEMS["wifi_client_config"]="WiFi Client Configuration"
+# Check for Upgrade
+MENU_ITEMS["upgrade_utility"]="Check for Upgrade"
 
 # -----------------------------------------------------------------------------
 # @var MAIN_MENU
@@ -2110,19 +2119,36 @@ MENU_ITEMS["execute_repo_script"]="Upgrade AP Pop-Up"
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2034
 MAIN_MENU=(
-    "setup_wifi_network"
-    "update_hostname"
-    "update_access_point_ip"
-    "update_access_point_ssid"
-    "switch_between_wifi_and_ap"
-    "run_ap_popup"
-    "execute_repo_script"
+    "live_switch"
+    "force_auto_negotiate"
+    "display_ap_menu"
+    "wifi_client_config"
+    "upgrade_utility"
+)
+
+# -----------------------------------------------------------------------------
+# @var AP_MENU
+# @brief Array defining the sub-menu options.
+# @details Contains keys that correspond to the `MENU_ITEMS` associative array.
+#          These keys define the options available in the sub-menu.
+#
+# @example
+# AP_MENU=(
+#     "option_three"
+#     "display_main_menu"
+# )
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2034
+AP_MENU=(
+    "update_ap_ssid"
+    "update_ap_password"
+    "update_ap_ip"
 )
 
 # -----------------------------------------------------------------------------
 # @brief Displays a menu based on the given menu array.
 # @details The menu items are numbered sequentially, and the user is prompted
-#          for input to select an option. Pressing Enter exits the menu.
+#          for input to select an option.
 #
 # @param $1 Array of menu keys to display.
 # @param $2 Debug flag for optional debug output.
@@ -2134,47 +2160,55 @@ MAIN_MENU=(
 #
 # @return Executes the corresponding function for the selected menu item.
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
 display_menu() {
     # Debug declarations
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     local choice
-    local i=1
-    local menu_array=("${!1}")  # Array of menu keys to display
+    local menu_array_name="$1"  # Name of the array (e.g., MAIN_MENU[@], SUB_MENU[@])
+    local menu_array=("${!menu_array_name}")  # Dereference the array
 
-    # Display the menu header
-    printf "%b%b%s%b\n\n" "$BOLD" "$FGGLD" "$MENU_HEADER" "$RESET"
+    while :; do
+        # Display the menu header
+        printf "%s\n\n" "$MENU_HEADER"
+        printf "Please select an option:\n\n"
 
-    printf "%bPlease select an option:%b\n\n" "$BOLD" "$RESET"
+        # Display the menu items
+        local i=1
+        for func in "${menu_array[@]}"; do
+            # Fixed-width format for consistent alignment
+            printf "%-4d%-30s\n" "$i" "${MENU_ITEMS[$func]}"
+            ((i++))
+        done
 
-    # Display the menu items
-    for func in "${menu_array[@]}"; do
-        # Fixed-width format for consistent alignment
-        printf "%-4d%-30s\n" "$i" "${MENU_ITEMS[$func]}"
-        ((i++))
-    done
+        # Read user choice
+        printf "\nEnter your choice (or press Enter to exit): "
+        read -n 1 -sr choice < /dev/tty || true
+        printf "\n"  # Add a newline after the choice for formatting
 
-    # Read user choice
-    printf "\nEnter your choice (or press Enter to exit): "
-    read -r choice || true
-    printf "%s\n" "$choice"
-
-    # Validate input
-    if [[ -z "$choice" ]]; then
-        printf "\nExiting.\n"
-        debug_end "$debug"
-        exit 0
-    elif [[ "$choice" =~ ^[0-9]+$ ]]; then
-        if [[ "$choice" -ge 1 && "$choice" -lt "$i" ]]; then
-            local func="${menu_array[choice-1]}"
-            "$func" "$debug"
+        # Validate input
+        if [[ -z "$choice" ]]; then
+            # Exit if the current menu is the main menu
+            if [[ "$menu_array_name" == "MAIN_MENU[@]" ]]; then
+                debug_end "$debug"
+                exit 0  # Exit the entire program
+            else
+                clear
+                debug_end "$debug"
+                return 0  # Return to the caller
+            fi
+        elif [[ "$choice" =~ ^[0-9]+$ ]]; then
+            if [[ "$choice" -ge 1 && "$choice" -lt "$i" ]]; then
+                local func="${menu_array[choice-1]}"
+                "$func" "$debug"
+                clear
+            else
+                printf "Invalid choice. Please try again.\n"
+            fi
         else
-            printf "Invalid choice. Please try again.\n"
+            printf "Invalid input. Please enter a number.\n"
         fi
-    else
-        printf "Invalid input. Please enter a number.\n"
-    fi
+    done
 
     # Debug log: function exit
     debug_end "$debug"
@@ -2188,13 +2222,12 @@ display_menu() {
 #
 # @return Calls `display_menu` with the main menu array.
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
 display_main_menu() {
     # Debug declarations
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Clear screen
-    # DEBUG TODO clear
+    clear
     # Display the menu
     display_menu MAIN_MENU[@] "$debug"
 
@@ -2212,16 +2245,14 @@ display_main_menu() {
 # @return Calls `display_menu` with the sub-menu array in a loop.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
-display_sub_menu() {
+display_ap_menu() {
     # Debug declarations
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
-    while true; do
-        # Clear screen
-        # DEBUG TODO clear
-        # Display the menu
-        display_menu SUB_MENU[@] "$debug"
-    done
+    # Clear screen
+    clear
+    # Display the menu
+    display_menu AP_MENU[@] "$debug"
 
     # Debug log: function exit
     debug_end "$debug"
@@ -2238,7 +2269,6 @@ display_sub_menu() {
 # Execute the menu
 #   do_menu "$debug"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
 do_menu() {
     # Debug declarations
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
@@ -2446,267 +2476,363 @@ usage() {
 }
 
 ############
-### AP Config Functions
+### Display Configured Networks Functions
 ############
-
-# -----------------------------------------------------------------------------
-# @brief Populate Wi-Fi network data.
-# @details Extracts Wi-Fi network information using nmcli, filters out entries
-#          with blank SSID, and returns the network data as an indexed array.
-# -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
-populate_wifi_networks() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+show_wifi_connection_details() {
+    # TODO - Do somethign with this
+    local connection_name="$1"
 
-    local wifi_info retval
-    clear
-    printf "%s%sAdd or modify a WiFi Network%s\n" "$FGYLW" "$BOLD" "$RESET"
-    printf "\nScanning for available WiFi networks, please wait.\n"
-    wifi_info=$(nmcli -t -f all --color no dev wifi list 2>/dev/null)
-    retval=$?
-
-    if [[ $retval -ne 0 ]]; then
-        printf "%s\n" "Error: Failed to execute 'nmcli'. Ensure NetworkManager is running and you have the necessary permissions." >&2
-        exit 1
+    # Check if the connection name is provided
+    if [[ -z "$connection_name" ]]; then
+        echo "Error: Connection name is required." >&2
+        return 1
     fi
 
-    if [[ -z "$wifi_info" ]]; then
-        printf "%s\n" "No Wi-Fi networks detected. Ensure Wi-Fi is enabled and try again." >&2
-        exit 0
+    # Fields to display
+    local fields=(
+        "connection.id"
+        "connection.interface-name"
+        "802-11-wireless.ssid"
+        "802-11-wireless-security.key-mgmt"
+        "802-11-wireless-security.psk"
+        "connection.autoconnect"
+        "connection.device"
+    )
+
+    # Create a comma-separated list of fields
+    local field_list
+    field_list=$(IFS=','; echo "${fields[*]}")
+
+    # Retrieve the selected fields
+    local details
+    details=$(nmcli -t -f "$field_list" connection show "$connection_name" 2>/dev/null)
+
+    # Check if nmcli succeeded
+    if [[ $? -ne 0 ]]; then
+        echo "Error: Unable to retrieve details for connection '$connection_name'." >&2
+        return 1
     fi
 
-    wifi_info="${wifi_info//\\:/-}"
-
-    local filtered_wifi_info
-    filtered_wifi_info=$(echo "$wifi_info" | awk -F ':' '$2 != ""')
-
-    IFS=$'\n' read -rd '' -a wifi_entries <<<"$filtered_wifi_info" || true
-
-    local index=1
-    declare -A ssid_to_best_signal
-    declare -A ssid_to_entry
-
-    for entry in "${wifi_entries[@]}"; do
-        IFS=":" read -r -a fields <<<"$entry"
-        local ssid="${fields[1]}"
-        local signal="${fields[8]}"
-
-        # Ensure the SSID is not empty
-        if [[ -n "$ssid" ]]; then
-            if [[ "$debug" == "debug" ]]; then
-                wifi_networks[index]="$entry"
-                ((index++))
-            else
-                # Initialize the key in the associative array if not set
-                if [[ -z "${ssid_to_best_signal[$ssid]:-}" || $signal -gt ${ssid_to_best_signal[$ssid]} ]]; then
-                    ssid_to_best_signal[$ssid]=$signal
-                    ssid_to_entry[$ssid]=$entry
-                fi
-            fi
-        fi
-    done
-
-    if [[ ! $debug == "debug" ]]; then
-        for ssid in "${!ssid_to_entry[@]}"; do
-            wifi_networks[index]="${ssid_to_entry[$ssid]}"
-            ((index++))
-        done
-    fi
-        debug_end "$debug"
+    # Display the details in a user-friendly format
+    echo "Details for connection '$connection_name':"
+    echo "-----------------------------------------"
+    echo "$details" | sed 's/:/: /g'
+    return 0
 }
 
 # -----------------------------------------------------------------------------
-# @brief Display Wi-Fi networks in a formatted table.
-# @details Outputs a table of Wi-Fi networks with selected columns and a
-#          numeric index for user selection. Handles empty network list.
+# @brief Populate configured network data.
+# @details Extracts configured network profiles using nmcli, processes the
+#          TIMESTAMP-REAL field to replace escaped colons, and stores them
+#          in an indexed array for further operations.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
-display_wifi_networks() {
+populate_configured_networks() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
-    local columns_to_display=(1 8 9 10) # SSID, SIGNAL, BARS, SECURITY
-    local header="NAME:SSID:SSID-HEX:BSSID:MODE:CHAN:FREQ:RATE:SIGNAL:BARS:SECURITY:WPA-FLAGS:RSN-FLAGS:DEVICE:ACTIVE:IN-USE:DBUS-PATH"
+    local network_info retval
+    # Retrieve only necessary fields excluding SSID
+    network_info=$(nmcli -t -f NAME,AUTOCONNECT,AUTOCONNECT-PRIORITY,ACTIVE,DEVICE,TYPE --color no connection show | grep -i ":802-11-wireless" 2>/dev/null)
+    retval=$?
 
-    if [[ ${#wifi_networks[@]} -eq 0 ]]; then
-        printf "%s\n" "No Wi-Fi networks detected." >&2
+    if [[ $retval -ne 0 ]]; then
+        printf "%s\n" "Failed to return data from 'nmcli'." >&2
+        exit 1
+    fi
+
+    if [[ -z "$network_info" ]]; then
+        printf "%s\n" "No configured networks found." >&2
         exit 0
     fi
 
-    IFS=":" read -r -a full_headers <<<"$header"
-    local selected_headers=()
-    for index in "${columns_to_display[@]}"; do
-        if [[ $index -lt ${#full_headers[@]} ]]; then
-            selected_headers+=("${full_headers[index]}")
-        else
-            printf "%s\n" "Error: Invalid column index $index in columns_to_display." >&2
-            exit 1
-        fi
-    done
+    # Trim the last field ":802-11-wireless"
+    network_info="${network_info//:802-11-wireless/}"
 
-    local num_columns=${#columns_to_display[@]}
+    # Replace escaped colons in TIMESTAMP-REAL with underscores
+    network_info="${network_info//\\:/_}"
+
+    # Build the final array with SSID inserted
+    local final_networks=()
+    while IFS=":" read -r name autoconnect priority active device; do
+        local ssid
+        # Retrieve SSID dynamically for each entry
+        ssid=$(nmcli -t -f 802-11-wireless.ssid connection show "$name" 2>/dev/null | cut -d':' -f2)
+        # Combine fields, inserting SSID after NAME
+        final_networks+=("$name:$ssid:$autoconnect:$priority:$active:$device")
+    done <<< "$network_info"
+
+    # Convert final_networks to the configured_networks array
+    configured_networks=("${final_networks[@]}")
+
+    debug_print "${configured_networks[*]}" >&2
+    debug_end "$debug"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Display configured networks in a formatted table.
+# @details Outputs a table of configured networks with selected columns and
+#          numeric index for user selection.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+display_configured_networks() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Define the columns to display
+    local fields_to_display=(
+        "NAME"
+        "SSID"
+        "AUTOCONNECT"
+        "PRIORITY"
+        "ACTIVE"
+        "DEVICE"
+    )
+    local field_indices=(0 1 2 3 4 5)  # Indices now include SSID
+
+    if [[ ${#configured_networks[@]} -eq 0 ]]; then
+        printf "%s\n" "No configured networks found." >&2
+        exit 0
+    fi
+
+    # Calculate column widths based on field names
+    local num_fields=${#fields_to_display[@]}
     local max_widths=()
-    for ((i = 0; i < num_columns; i++)); do
-        max_widths[i]=${#selected_headers[i]}
+    for ((i = 0; i < num_fields; i++)); do
+        max_widths[i]=${#fields_to_display[i]}
     done
 
-    for key in "${!wifi_networks[@]}"; do
-        IFS=":" read -r -a fields <<<"${wifi_networks[$key]}"
-        for ((i = 0; i < num_columns; i++)); do
-            local column_index=${columns_to_display[i]}
-            local field_length=${#fields[column_index]}
+    # Adjust column widths based on data
+    for entry in "${configured_networks[@]}"; do
+        IFS=":" read -r -a fields <<<"$entry"
+        for ((i = 0; i < num_fields; i++)); do
+            local field_length=${#fields[i]}
             if ((field_length > max_widths[i])); then
                 max_widths[i]=$field_length
             fi
         done
     done
 
-    clear
-
+    # Print header row
     printf "%s%6s%s  " "$BOLD" "CHOICE" "$RESET"
-    for ((i = 0; i < num_columns; i++)); do
-        printf "%s%-*s%s  " "$BOLD" "${max_widths[i]}" "${selected_headers[i]}" "$RESET"
+    for ((i = 0; i < num_fields; i++)); do
+        printf "%s%-*s%s  " "$BOLD" "${max_widths[i]}" "${fields_to_display[i]}" "$RESET"
     done
     printf "\n"
 
-    for key in $(printf "%s\n" "${!wifi_networks[@]}" | sort -n); do
-        IFS=":" read -r -a fields <<<"${wifi_networks[$key]}"
+    # Print data rows
+    local index=0
+    for entry in "${configured_networks[@]}"; do
+        IFS=":" read -r -a fields <<<"$entry"
 
-        printf "%6s  " "$key"
-        for ((i = 0; i < num_columns; i++)); do
-            local column_index=${columns_to_display[i]}
-            printf "%-*s  " "${max_widths[i]}" "${fields[column_index]}"
+        # Wrap the index number with ${BOLD} and ${RESET}
+        printf "%s%6s%s  " "$BOLD" "$index" "$RESET"
+        for ((i = 0; i < num_fields; i++)); do
+            printf "%-*s  " "${max_widths[i]}" "${fields[i]}"
         done
         printf "\n"
+        ((index++))
     done
+
+    # Add static menu items directly after the data rows without a blank line
+    printf "%s%6s%s  %s\n" "$BOLD" "C" "$RESET" "(C)reate a new connection"
+    printf "%s%6s%s  %s\n" "$BOLD" "P" "$RESET" "Change (P)riority"
+
     printf "\n"
     debug_end "$debug"
 }
 
 # -----------------------------------------------------------------------------
-# @brief Prompt user to select a Wi-Fi network by index.
-# @details Allows the user to enter an index corresponding to a Wi-Fi network.
-#          Pressing Enter or selecting "0" returns a blank value.
+# @brief Select a configured connection by index.
+# @details Prompts the user to select a network and returns the NAME field.
 #
-# @return The SSID of the selected network or blank for "0" or Enter.
+# @return The NAME of the selected network or blank for "0" or Enter.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
-select_wifi_network() {
+select_configured_network() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     local choice
 
     while :; do
-        read -rp "Select a network by index (or press Enter to exit): " choice
+        read -rp "Select a connection by the choice column (or press Enter to exit): " choice
 
         if [[ -z "$choice" ]]; then
-            printf "%s\n" ""
+            # User pressed Enter without input, exit the loop
+            debug_end "$debug"
             return
         fi
 
-        if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 0 && choice <= ${#wifi_networks[@]})); then
-            break
+        if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 0 && choice < ${#configured_networks[@]})); then
+            # Numeric selection, return the corresponding network name
+            IFS=":" read -r -a selected_fields <<<"${configured_networks[$choice]}"
+            selected_fields[4]="${selected_fields[4]//_/\\:}"  # Convert TIMESTAMP-REAL back
+            printf "%s\n" "${selected_fields[0]}"
+            debug_end "$debug"
+            return
+        elif [[ "$choice" =~ ^[Cc]$ ]]; then
+            # "C" or "c" selected, return "c"
+            printf "c\n"
+            debug_end "$debug"
+            return
+        elif [[ "$choice" =~ ^[Pp]$ ]]; then
+            # "P" or "p" selected, return "p"
+            printf "p\n"
+            debug_end "$debug"
+            return
         else
-            printf "%s\n" "Invalid selection. Please enter a number between 0 and ${#wifi_networks[@]}." >&2
+            # Invalid input
+            printf "%s\n" "Invalid selection. Please enter a valid choice." >&2
         fi
     done
-
-    if [[ -z "$choice" || "$choice" -eq 0 ]]; then
-        printf "%s\n" ""
-    else
-        IFS=":" read -r -a selected_fields <<<"${wifi_networks[$choice]}"
-        printf "%s\n" "${selected_fields[1]}"
-    fi
-    debug_end "$debug"
 }
 
 # -----------------------------------------------------------------------------
-# @brief Set up and select a Wi-Fi network.
-# @details Orchestrates the process of populating Wi-Fi data, displaying
-#          available networks, and allowing the user to select one. Optionally,
-#          prepares for subsequent actions with the selected SSID.
+# @brief Select a configured network.
+# @details Orchestrates the process of populating network data, displaying
+#          configured profiles, and allowing the user to select one. Optionally,
+#          prepares for subsequent actions with the selected NAME.
 #
-# @return The selected SSID is output for further processing.
+# @return The selected network NAME is output for further processing.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
-setup_wifi_network() {
+wifi_client_config() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local selected_ssid
+    local selected_network
 
-    populate_wifi_networks "$debug"
-    display_wifi_networks "$debug"
-    selected_ssid=$(select_wifi_network "$debug")
+    while :; do
+        clear
+        populate_configured_networks "$debug"
+        display_configured_networks "$debug"
+        selected_network=$(select_configured_network "$debug")
 
-    # Call the function with the SSID
-    if [[ -z "$selected_ssid" ]]; then
-        printf "No SSID selected.\n"
-    else
-        update_wifi_profile "$selected_ssid" "$debug"
-    fi
+        if [[ -z "$selected_network" ]]; then
+            # User pressed Enter without input, exit the loop
+            debug_end "$debug"
+            return
+        elif [[ "$selected_network" == "c" ]]; then
+            # TODO
+            printf "Creating a new connection\n"
+            pause
+        elif [[ "$selected_network" == "p" ]]; then
+            # TODO
+            printf "Changing Priority\n"
+            pause
+        elif [[ ${#selected_network} -gt 1 ]]; then
+            show_wifi_connection_details "$selected_network"
+            pause
+        else
+            printf "Invalid selection.\n"
+            pause
+        fi
+    done
 
     debug_end "$debug"
     return 0
 }
 
-# -----------------------------------------------------------------------------
-# @brief Toggle between WiFi and Access Point modes using the AP Pop-Up script.
-# @details
-# - Runs the AP Pop-Up script directly to switch between network modes.
-# - Provides feedback if the script is unavailable or not installed.
-#
-# @global SCRIPT_NAME The name of the AP Pop-Up script.
-# @global APP_PATH    The full path to the AP Pop-Up script.
-# @return None
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-switch_between_wifi_and_ap() {
-    # clear
-    logI "Switching between WiFi and Access Point."
+############
+### AP Config Functions
+############
 
-    # Check if the script is available and execute it
-    if which "$APP_NAME" &>/dev/null; then
-        # TODO: Need an argument to force the switch
-        exec_command "Calling $APP_NAME" "sudo appop"
+live_switch() {
+    # TODO
+    # Debug declarations
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Execute menu action
+    printf "\nRunning %s().\n" "${FUNCNAME[0]}"
+    pause "$debug"
+
+    # Debug log: function exit
+    debug_end "$debug"
+}
+
+force_auto_negotiate() {
+    # TODO
+    # Debug declarations
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Execute menu action
+    printf "\nRunning %s().\n" "${FUNCNAME[0]}"
+    pause
+
+    # Debug log: function exit
+    debug_end "$debug"
+}
+
+update_ap_ssid() {
+    clear
+
+    printf "\n"
+    printf ">> ${FGYLW}Current AP SSID:${RESET} ${FGGRN}%s${RESET}\n" "$AP_SSID"
+    printf "\n"
+    printf "Enter new SSID (1-32 characters, no leading/trailing spaces, Enter to keep current):\n"
+
+    read -r new_ssid
+
+    # Trim and validate SSID
+    new_ssid=$(printf "%s" "$new_ssid" | xargs | sed -e 's/^"//' -e 's/"$//')
+    if [[ -n "$new_ssid" ]]; then
+        if [[ ${#new_ssid} -ge 1 && ${#new_ssid} -le 32 && "$new_ssid" =~ ^[[:print:]]+$ && "$new_ssid" != *" "* ]]; then
+            AP_SSID="$new_ssid"
+            save_config
+                "$FGYLW" "$RESET" "$FGGRN" "$new_ssid" "$RESET"
+
+        else
+            logE "Invalid SSID. Must be 1-32 printable characters with no leading/trailing spaces."
+            return
+        fi
     else
-        warn "$APP_NAME not available. Install first."
+        printf "Keeping the current SSID.\n"
     fi
 }
 
-# -----------------------------------------------------------------------------
-# @brief Update the Access Point (AP) IP address and Gateway in the configuration file.
-# @details Allows the user to select a base IP range, enter the third and fourth
-#          octets, and validates the resulting IP and gateway settings. Updates
-#          the configuration file if changes are confirmed.
-#
-# @global AP_CIDR The current AP IP range in CIDR format.
-# @global AP_GATEWAY The current AP Gateway.
-# @global CONFIG_FILE Path to the configuration file.
-#
-# @return None
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-update_access_point_ip() {
+update_ap_password() {
+    clear
+
+    printf "\n"
+    printf ">> ${FGYLW}Current AP Password:${RESET} ${FGGRN}%s${RESET}\n" "$AP_PASSWORD"
+    printf "\n"
+    printf "Enter new password (8-63 printable characters with no leading/trailing spaces, Enter to keep current):\n"
+
+    read -r new_pw
+
+    # Trim and validate password
+    new_pw=$(printf "%s" "$new_pw" | xargs)
+    if [[ -n "$new_pw" ]]; then
+        if [[ ${#new_pw} -ge 8 && ${#new_pw} -le 63 && "$new_pw" =~ ^[[:print:]]+$ ]]; then
+            AP_PASSWORD="$new_pw"
+            save_config
+        else
+            logE "Invalid password. Must be 8-63 printable characters with no leading/trailing spaces."
+        fi
+    else
+        printf "Keeping the current password.\n"
+    fi
+}
+
+update_ap_ip() {
     clear
     local choice third_octet fourth_octet base new_ip new_gateway confirm
 
     # Display current AP configuration
-    cat << EOF
+    printf ">> ${FGYLW}Current AP IP:${RESET} ${FGGRN}%s${RESET}\n" "$AP_CIDR"
+    printf ">> ${FGYLW}Current AP GW:${RESET} ${FGGRN}%s${RESET}\n" "$AP_GATEWAY"
+    printf "\nChoose a new network:\n"
+    printf "1   192.168.xxx.xxx\n"
+    printf "2   172.16.xxx.xxx\n"
+    printf "3   10.0.xxx.xxx\n"
+    printf "\nPress Enter to return to the previous menu.\n\n"
 
->> ${FGYLW}Current AP IP:${RESET} ${FGGRN}$AP_CIDR${RESET}
->> ${FGYLW}Current AP GW:${RESET} ${FGGRN}$AP_GATEWAY${RESET}
-
-Choose a new network:
-    1) 192.168.xxx.xxx
-    2) 10.0.xxx.xxx
-    3) Cancel
-
-EOF
-
-    read -n 1 -t 5 -sr choice || true
+    # Read user choice
+    read -n 1 -sr choice || true
     printf "\n"
+
     case "$choice" in
         1) base="192.168." ;;
-        2) base="10.0." ;;
-        3) return ;;
-        *) logW "Invalid selection." ; return ;;
+        2) base="172.16." ;;
+        3) base="10.0." ;;
+        "") return ;;  # Return on empty input (Enter)
+        *) printf "%s\n" "Invalid selection." ; return ;;
     esac
 
     printf "\nEnter the third octet (0-255):\n"
@@ -2728,116 +2854,58 @@ EOF
     printf "\nValidating network configuration, this will take a moment.\n"
     if ! validate_ap_configuration "$new_ip" "$new_gateway"; then return; fi
 
-    cat << EOF
-
-<< ${FGYLW}New AP IP will be:${RESET} ${FGGRN}$new_ip${RESET}
-<< ${FGYLW}New AP GW will be:${RESET} ${FGGRN}$new_gateway${RESET}
-
-EOF
+    printf "\n"
+    printf "<< ${FGYLW}New AP IP will be:${RESET} ${FGGRN}%s${RESET}\n" "$new_ip"
+    printf "<< ${FGYLW}New AP GW will be:${RESET} ${FGGRN}%s${RESET}\n" "$new_gateway"
+    printf "\n"
 
     printf "Apply these changes? (y/N): "
     read -n 1 -t 5 -sr confirm || true
     printf "\n"
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        sed -i "s|^AP_CIDR=.*|AP_CIDR=\"$new_ip\"|" "$CONFIG_FILE"
-        sed -i "s|^AP_GATEWAY=.*|AP_GATEWAY=\"$new_gateway\"|" "$CONFIG_FILE"
         AP_CIDR="$new_ip"
         AP_GATEWAY="$new_gateway"
-        printf "Changes applied successfully.\n"
+        save_config
     else
         logI "Changes canceled."
     fi
 }
 
-# -----------------------------------------------------------------------------
-# @brief Update the Access Point (AP) SSID and Password in the configuration file.
-# @details Prompts the user to enter a new SSID and/or password for the AP, validates
-#          the inputs, and updates the configuration file accordingly.
-#          Ensures that SSIDs and passwords meet character and length requirements.
-#
-# @global AP_SSID The current AP SSID.
-# @global AP_PASSWORD The current AP password.
-# @global CONFIG_FILE Path to the configuration file.
-#
-# @return None
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-update_access_point_ssid() {
-    # clear
+upgrade_utility() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
-    cat << EOF
+    local script_name="install.sh"
+    local script_url="${GIT_RAW}/${REPO_BRANCH}/scripts/${script_name}"
 
->> ${FGYLW}Current AP SSID:${RESET} ${FGGRN}$AP_SSID${RESET}
+    # Debug information
+    debug_print "Fetching script from URL: $script_url" "$debug"
 
-Enter new SSID (1-32 characters, no leading/trailing spaces, Enter to keep current):
-EOF
-    read -r new_ssid
-
-    # Trim and validate SSID
-    new_ssid=$(printf "%s" "$new_ssid" | xargs | sed -e 's/^"//' -e 's/"$//')
-    if [[ -n "$new_ssid" ]]; then
-        if [[ ${#new_ssid} -ge 1 && ${#new_ssid} -le 32 && "$new_ssid" =~ ^[[:print:]]+$ && "$new_ssid" != *" "* ]]; then
-            AP_SSID="$new_ssid"
-            sed -i "s/^AP_SSID=.*/AP_SSID=\"$new_ssid\"/" "$CONFIG_FILE"
-            printf "\n%s<< AP SSID updated to:%s %s%s%s\n" \
-                "$FGYLW" "$RESET" "$FGGRN" "$new_ssid" "$RESET"
-
-        else
-            logE "Invalid SSID. Must be 1-32 printable characters with no leading/trailing spaces."
-            return
-        fi
+    # Validate the URL using exec_command
+    if exec_command "Validate URL" "curl --head --silent --fail $script_url" "$debug"; then
+        debug_print "URL is valid. Proceeding to download and execute." "$debug"
     else
-        printf "Keeping the current SSID.\n"
+        warn "Unable to get install script from Git repo $REPO_ORG/$REPO_NAME."
     fi
 
-    cat << EOF
+    # Construct the curl command to pipe the script to sudo bash
+    local exec_process="curl -fsSL $script_url | sudo bash"
 
->> ${FGYLW}Current AP Password:${RESET} ${FGGRN}$AP_PASSWORD${RESET}
+    # Execute the command using exec_new_shell
+    exec_new_shell "Install script" "$exec_process" "$debug"
 
-Enter new password (8-63 printable characters with no leading/trailing spaces, Enter to keep current):
-EOF
-    read -r new_pw
-
-    # Trim and validate password
-    new_pw=$(printf "%s" "$new_pw" | xargs)
-    if [[ -n "$new_pw" ]]; then
-        if [[ ${#new_pw} -ge 8 && ${#new_pw} -le 63 && "$new_pw" =~ ^[[:print:]]+$ ]]; then
-            AP_PASSWORD="$new_pw"
-            sed -i "s/^AP_PASSWORD=.*/AP_PASSWORD=\"$new_pw\"/" "$CONFIG_FILE"
-            printf "\n%s<< AP Password updated to:%s %s%s%s\n" \
-                "$FGYLW" "$RESET" "$FGGRN" "$new_pw" "$RESET"
-        else
-            logE "Invalid password. Must be 8-63 printable characters with no leading/trailing spaces."
-        fi
-    else
-        printf "Keeping the current password.\n"
-    fi
+    debug_end "$debug"
 }
 
-# -----------------------------------------------------------------------------
-# @brief Change the system hostname using `nmcli`.
-# @details Prompts the user to enter a new hostname, validates the input, and
-#          updates the system hostname using `nmcli`, `/etc/hostname`, and `/etc/hosts`.
-#          Reloads hostname-related services and updates the current session.
-#
-# @global HOSTNAME The shell's current hostname variable.
-# @global FGYLW    Foreground yellow color code for terminal output.
-# @global FGGRN    Foreground green color code for terminal output.
-# @global RESET    Reset color code for terminal output.
-# @return None
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
+# TODO: Do we use this?
 update_hostname() {
     # clear
     local current_hostname
     current_hostname=$(nmcli general hostname)
 
-    cat << EOF
-
->> ${FGYLW}Current hostname:${RESET} ${FGGRN}$current_hostname${RESET}
-
-Enter a new hostname (Enter to keep current):
-EOF
+    printf "\n"
+    printf ">> ${FGYLW}Current hostname:${RESET} ${FGGRN}%s${RESET}\n" "$current_hostname"
+    printf "\n"
+    printf "Enter a new hostname (Enter to keep current):\n"
 
     read -r new_hostname || true
 
@@ -2862,30 +2930,6 @@ EOF
     fi
 }
 
-# -----------------------------------------------------------------------------
-# @brief Updates the password for an existing WiFi network or creates a new profile.
-# @details Configures the selected WiFi network by either updating the password
-#          of an existing profile or creating a new profile. Validates password
-#          length and attempts to connect to the network.
-#
-# @param $1 The SSID of the WiFi network to configure.
-#
-# @global FGYLW Terminal formatting for yellow foreground.
-# @global RESET Terminal formatting reset sequence.
-#
-# @return None
-# @throws Logs an error message if connection attempts fail or input is invalid.
-#
-# @example
-# update_wifi_profile "MyNetwork"
-# Output:
-#   Configuring WiFi network: MyNetwork
-#   An existing profile for this SSID was found: MyNetwork
-#   Enter the new password for the network (or press Enter to skip updating):
-#   Password updated. Attempting to connect to MyNetwork.
-#   Successfully connected to MyNetwork.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
 update_wifi_profile() {
     local ssid="$1"
     local password=""
@@ -2900,7 +2944,7 @@ update_wifi_profile() {
     if [ -n "$existing_profile" ]; then
         # Existing profile found
         printf "An existing profile for this SSID was found: %s\n" "$existing_profile"
-        printf "%sEnter the new password for the network (or press Enter to skip updating):%s\n" "${FGYLW}" "${RESET}"
+        printf "%bEnter the new password for the network (or press Enter to skip updating):%b\n" "${FGYLW}" "${RESET}"
         read -r password
 
         if [ -n "$password" ] && [ "${#password}" -ge 8 ]; then
@@ -2923,7 +2967,7 @@ update_wifi_profile() {
     else
         # No existing profile found, create a new one
         printf "\nNo existing profile found for %s.\n" "$ssid"
-        printf "%sEnter the password for the network (minimum 8 characters):%s\n" "${FGYLW}" "${RESET}"
+        printf "%bEnter the password for the network (minimum 8 characters):%b\n" "${FGYLW}" "${RESET}"
         read -r password
 
         if [ -n "$password" ] && [ "${#password}" -ge 8 ]; then
@@ -2942,16 +2986,6 @@ update_wifi_profile() {
     fi
 }
 
-# -----------------------------------------------------------------------------
-# @brief Validate a proposed Access Point (AP) configuration.
-# @details Ensures there are no network conflicts, the gateway is not in use,
-#          and the subnet and gateway are valid.
-#
-# @param $1 The new subnet in CIDR format (e.g., "192.168.0.1/24").
-# @param $2 The new gateway IP address (e.g., "192.168.0.254").
-# @return 0 if valid, 1 if invalid.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
 validate_ap_configuration() {
     local new_subnet="$1"
     local new_gateway="$2"
@@ -2978,18 +3012,6 @@ validate_ap_configuration() {
     return 0
 }
 
-# -----------------------------------------------------------------------------
-# @brief Validate a proposed hostname.
-# @details Checks if the hostname adheres to the following rules:
-#          - Not empty.
-#          - Length between 1 and 63 characters.
-#          - Does not start or end with a hyphen or period.
-#          - Contains only alphanumeric characters and hyphens.
-#
-# @param $1 The hostname to validate.
-# @return 0 if the hostname is valid, 1 otherwise.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
 validate_hostname() {
     local hostname="$1"
 
@@ -3021,15 +3043,6 @@ validate_hostname() {
     return 0
 }
 
-# -----------------------------------------------------------------------------
-# @brief Validate that a given number is within a specific range.
-# @details Ensures the input is a non-negative integer within the range 0 to the specified maximum value.
-#
-# @param $1 The number to validate.
-# @param $2 The maximum allowed value.
-# @return Outputs "true" if valid, logs a warning and outputs nothing if invalid.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
 validate_host_number() {
     local num="$1"
     local max="$2"  # Maximum allowed value
@@ -3042,15 +3055,6 @@ validate_host_number() {
     fi
 }
 
-# -----------------------------------------------------------------------------
-# @brief Check for conflicts between a new subnet and active networks.
-# @details Compares the new subnet with active subnets on the system and logs
-#          any conflicts.
-#
-# @param $1 The new AP subnet in CIDR format (e.g., "192.168.0.1/24").
-# @return 0 if no conflicts, 1 if conflicts are detected.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
 validate_network_conflict() {
     local new_subnet="$1"  # New AP subnet
     local active_networks
@@ -3069,15 +3073,6 @@ validate_network_conflict() {
     return 0
 }
 
-# -----------------------------------------------------------------------------
-# @brief Validate a subnet and its gateway.
-# @details Checks if the subnet follows the CIDR format and the gateway is a valid IP address.
-#
-# @param $1 The subnet in CIDR format (e.g., "192.168.0.1/24").
-# @param $2 The gateway IP address (e.g., "192.168.0.254").
-# @return 0 if valid, 1 if invalid.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
 validate_subnet() {
     local ip="$1"
     local gw="$2"
@@ -3090,90 +3085,6 @@ validate_subnet() {
     fi
 }
 
-# -----------------------------------------------------------------------------
-# @brief Execute the AP Pop-Up script to manage WiFi and Access Point switching.
-# @details
-# - Runs the AP Pop-Up script if it is installed and available in the system's PATH.
-# - Logs the operation and handles errors if the script is not found.
-#
-# @global SCRIPT_NAME The name of the AP Pop-Up script.
-# @global APP_PATH    The full path to the AP Pop-Up script.
-# @return None
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-run_ap_popup() {
-    # clear
-    logI "Running AP Pop-Up."
-
-    # Check if the script is available and execute it
-    if which "$APP_NAME" &>/dev/null; then
-        # TODO:  Figure out if an argument is needed
-        exec_command "Calling $APP_NAME" "sudo $APP_NAME"
-    else
-        warn "$APP_NAME not available. Install first."
-    fi
-}
-
-# -----------------------------------------------------------------------------
-# @brief Loads configuration variables from a specified configuration file.
-# @details This function ensures that a configuration file exists, validates
-#          its path, and then sources it to load the variables into the script.
-#          It logs debugging information and handles errors gracefully.
-#
-# @global CONFIG_FILE The path to the configuration file to be sourced.
-#
-# @throws Exits the script with an error message if:
-#         - CONFIG_FILE is not set or empty.
-#         - The specified configuration file does not exist or is invalid.
-#
-# @return None. If successful, the configuration variables are loaded into
-#         the current shell environment.
-#
-# @example
-# CONFIG_FILE="/etc/appop.conf"
-# load_config || exit 1
-# echo "WiFi Interface: $WIFI_INTERFACE"
-# -----------------------------------------------------------------------------
-load_config() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-
-    # Ensure CONFIG_FILE is set and non-empty
-    if [[ -z "$CONFIG_FILE" ]]; then
-        die "CONFIG_FILE is not set. Please specify the path to the configuration file."
-    fi
-
-    # Ensure the configuration file exists and is a regular file
-    if [[ -f "$CONFIG_FILE" ]]; then
-        # Source the configuration file to load its variables
-        # shellcheck disable=SC1090
-        source "$CONFIG_FILE"
-        debug_print "Configuration file '$CONFIG_FILE' loaded successfully." "$debug"
-    else
-        die "Configuration file '$CONFIG_FILE' not found or is not a regular file."
-    fi
-
-    debug_end "$debug"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Download and execute the install.sh script from the repo.
-# @details This function fetches the install.sh script from the 'scripts' folder
-#          in the repository using curl and executes it through sudo bash.
-#          Supports optional debugging to trace the execution process.
-#
-# @param $1 Optional debug flag ("debug" to enable debug output).
-#
-# @global GIT_RAW Base URL for raw GitHub content.
-# @global REPO_BRANCH The branch of the repository to target.
-#
-# @throws Exits with a non-zero status if the command execution fails.
-#
-# @return None.
-#
-# @example
-# DRY_RUN=true execute_repo_script "debug"
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
 execute_repo_script() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -3199,6 +3110,63 @@ execute_repo_script() {
     debug_end "$debug"
 }
 
+load_config() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Ensure CONFIG_FILE is set and non-empty
+    if [[ -z "$CONFIG_FILE" ]]; then
+        die "CONFIG_FILE is not set. Please specify the path to the configuration file."
+    fi
+
+    # Ensure the configuration file exists and is a regular file
+    if [[ -f "$CONFIG_FILE" ]]; then
+        # Source the configuration file to load its variables
+        # shellcheck disable=SC1090
+        source "$CONFIG_FILE"
+        debug_print "Configuration file '$CONFIG_FILE' loaded successfully." "$debug"
+    else
+        die "Configuration file '$CONFIG_FILE' not found or is not a regular file."
+    fi
+
+    debug_end "$debug"
+}
+
+save_config() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Ensure CONFIG_FILE is set and non-empty
+    if [[ -z "$CONFIG_FILE" ]]; then
+        die "CONFIG_FILE is not set. Please specify the path to save the configuration file."
+    fi
+
+    local retval base_name
+    base_name="$(basename "${CONFIG_FILE}")"
+    # Attempt to write to the configuration file
+    {
+        echo "# ${base_name}"
+        echo "# Generated by save_config() on $(date)"
+        echo "# Configuration for appop"
+        echo "WIFI_INTERFACE=\"$WIFI_INTERFACE\""             
+        echo "AP_PROFILE_NAME=\"$AP_PROFILE_NAME\""
+        echo "AP_SSID=\"$AP_SSID\""
+        echo "AP_PASSWORD=\"$AP_PASSWORD\""
+        echo "AP_CIDR=\"$AP_CIDR\""
+        echo "AP_GATEWAY=\"$AP_GATEWAY\""
+        echo "ENABLE_WIFI=\"$ENABLE_WIFI\""
+    } > "$CONFIG_FILE"
+    # shellcheck disable=SC2320
+    retval=$?
+
+    # Check for successful write
+    if [[ $? -eq 0 ]]; then
+        debug_print "Configuration saved to '$CONFIG_FILE' successfully." "$debug"
+    else
+        die "Failed to save configuration to '$CONFIG_FILE'. Check file permissions."
+    fi
+
+    debug_end "$debug"
+}
+
 ############
 ### Main Functions
 ############
@@ -3219,6 +3187,7 @@ _main() {
 
     load_config "$@" "$debug"          # Load configuration file
     do_menu "$@" "$debug"              # Display main menu
+    save_config "$@" "$debug"          # Save configuration file
 
     debug_end "$debug"
     return 0
