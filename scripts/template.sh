@@ -264,7 +264,7 @@ declare -a SUB_MENU         # Array defining the sub-menu screen
 declare MENU_HEADER="${MENU_HEADER:-Menu}"  # Global menu header
 
 # -----------------------------------------------------------------------------
-# Declare Menu Variables
+# Declare Arguments Variables
 # -----------------------------------------------------------------------------
 declare ARGUMENTS_LIST=()   # List of word arguments for command line parsing
 declare OPTIONS_LIST=()     # List of -f--fl arguemtns for command line parsing
