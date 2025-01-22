@@ -25,3 +25,5 @@ curl -fsSL https://raw.githubusercontent.com/lbussy/ap-popup/refs/heads/main/scr
 ``` bash
 curl -fsSL https://raw.githubusercontent.com/lbussy/ap-popup/refs/heads/main/scripts/install.sh | sudo bash -s -- uninstall debug
 ```
+
+(Note: The uninstall commands use the same script with an 'uninstall' argument.)
