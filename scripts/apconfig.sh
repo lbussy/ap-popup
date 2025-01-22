@@ -1639,7 +1639,6 @@ check_release() {
 # pad_with_spaces 42 6  # Output: "   42"
 # pad_with_spaces 123 5  # Output: "  123"
 # -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
 pad_with_spaces() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -1759,6 +1758,390 @@ wrap_messages() {
 }
 
 # -----------------------------------------------------------------------------
+# @brief Log a message with optional details to the console and/or file.
+# @details Handles combined logic for logging to console and/or file,
+#          supporting optional details. If details are provided, they are
+#          logged with an "[EXTENDED]" tag.
+#
+# @param $1 Timestamp of the log entry.
+# @param $2 Log level (e.g., DEBUG, INFO, WARN, ERROR).
+# @param $3 Color code for the log level.
+# @param $4 Line number where the log entry originated.
+# @param $5 The main log message.
+# @param $6 [Optional] Additional details for the log entry.
+#
+# @global LOG_OUTPUT Specifies where to output logs ("console", "file", or
+#         "both").
+# @global LOG_FILE File path for log storage if `LOG_OUTPUT` includes "file".
+# @global THIS_SCRIPT The name of the current script.
+# @global RESET ANSI escape code to reset text formatting.
+#
+# @return None
+# -----------------------------------------------------------------------------
+print_log_entry() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Declare local variables at the start of the function
+    local timestamp="$1"
+    local level="$2"
+    local color="$3"
+    local lineno="$4"
+    local message="$5"
+
+    # Skip logging if the message is empty
+    if [[ -z "$message" ]]; then
+            debug_end "$debug"
+        return 1
+    fi
+
+    # Log to file if required
+    if [[ "$LOG_OUTPUT" == "file" || "$LOG_OUTPUT" == "both" ]]; then
+        printf "%s [%s] [%s:%d] %s\\n" "$timestamp" "$level" "$THIS_SCRIPT" "$lineno" "$message" >> "$LOG_FILE"
+    fi
+
+    # Log to console if required and USE_CONSOLE is true
+    if [[ "$USE_CONSOLE" == "true" && ("$LOG_OUTPUT" == "console" || "$LOG_OUTPUT" == "both") ]]; then
+        printf "%b[%s]%b %s\\n" "$color" "$level" "$RESET" "$message"
+    fi
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Generate a timestamp and line number for log entries.
+#
+# @details This function retrieves the current timestamp and the line number of
+#          the calling script. If the optional debug flag is provided, it will
+#          print debug information, including the function name, caller's name,
+#          and the line number where the function was called.
+#
+# @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
+#
+# @return A pipe-separated string in the format: "timestamp|line_number".
+#
+# @example
+# prepare_log_context "debug"
+# -----------------------------------------------------------------------------
+prepare_log_context() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    local timestamp
+    local lineno
+
+    # Generate the current timestamp
+    timestamp=$(date "+%Y-%m-%d %H:%M:%S")
+
+    # Retrieve the line number of the caller
+    lineno="${BASH_LINENO[2]}"
+
+    # Pass debug flag to pad_with_spaces
+    lineno=$(pad_with_spaces "$lineno" "$debug") # Pass debug flag
+
+    # Return the pipe-separated timestamp and line number
+    printf "%s|%s\n" "$timestamp" "$lineno"
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Log a message with the specified log level.
+# @details Logs messages to both the console and/or a log file, depending on
+#          the configured log output. The function uses the `LOG_PROPERTIES`
+#          associative array to determine the log level, color, and severity.
+#          If the "debug" argument is provided, debug logging is enabled for
+#          additional details.
+#
+# @param $1 Log level (e.g., DEBUG, INFO, ERROR). The log level controls the
+#           message severity.
+# @param $2 Main log message to log.
+# @param $3 [Optional] Debug flag. Pass "debug" to enable debug output.
+#
+# @global LOG_LEVEL The current logging verbosity level.
+# @global LOG_PROPERTIES Associative array defining log level properties, such
+#         as severity and color.
+# @global LOG_FILE Path to the log file (if configured).
+# @global USE_CONSOLE Boolean flag to enable or disable console output.
+# @global LOG_OUTPUT Specifies where to log messages ("file", "console",
+#         "both").
+#
+# @return None
+#
+# @example
+# log_message "INFO" "This is a message"
+# log_message "INFO" "This is a message" "debug"
+# -----------------------------------------------------------------------------
+log_message() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Ensure the calling function is log_message_with_severity()
+    if [[ "${FUNCNAME[1]}" != "log_message_with_severity" ]]; then
+        warn "log_message() can only be called from log_message_with_severity()."
+            debug_end "$debug"
+        return 1
+    fi
+
+    local level="UNSET"
+    local message="<no message>"
+
+    local context timestamp lineno custom_level color severity config_severity
+
+    # Get level if it exists (must be one of the predefined values)
+    if [[ -n "$1" && "$1" =~ ^(DEBUG|INFO|WARNING|ERROR|CRITICAL|EXTENDED)$ ]]; then
+        level="$1"
+        shift  # Move to the next argument
+    fi
+
+    # Get message if it exists and is not "debug"
+    if [[ -n "$1" ]]; then
+        message="$1"
+        shift  # Move to the next argument
+    fi
+
+    # Validate the log level and message if needed
+    if [[ "$level" == "UNSET" || -z "${LOG_PROPERTIES[$level]:-}" || "$message" == "<no message>" ]]; then
+        warn "Invalid log level '$level' or empty message."
+            debug_end "$debug"
+        return 1
+    fi
+
+    # Prepare log context (timestamp and line number)
+    context=$(prepare_log_context "$debug")  # Pass debug flag to sub-function
+    IFS="|" read -r timestamp lineno <<< "$context"
+
+    # Extract log properties for the specified level
+    IFS="|" read -r custom_level color severity <<< "${LOG_PROPERTIES[$level]}"
+
+    # Check if all three values (custom_level, color, severity) were successfully parsed
+    if [[ -z "$custom_level" || -z "$color" || -z "$severity" ]]; then
+        warn "Malformed log properties for level '$level'. Using default values."
+        custom_level="UNSET"
+        color="$RESET"
+        severity=0
+    fi
+
+    # Extract severity threshold for the configured log level
+    IFS="|" read -r _ _ config_severity <<< "${LOG_PROPERTIES[$LOG_LEVEL]}"
+
+    # Check for valid severity level
+    if [[ -z "$config_severity" || ! "$config_severity" =~ ^[0-9]+$ ]]; then
+        warn "Malformed severity value for level '$LOG_LEVEL'."
+            debug_end "$debug"
+        return 1
+    fi
+
+    # Skip logging if the message's severity is below the configured threshold
+    if (( severity < config_severity )); then
+            debug_end "$debug"
+        return 0
+    fi
+
+    # Call print_log_entry to handle actual logging (to file and console)
+    print_log_entry "$timestamp" "$custom_level" "$color" "$lineno" "$message" "$debug"
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Log a message with the specified severity level.
+# @details This function logs messages at the specified severity level and
+#          handles extended details and debug information if provided.
+#
+# @param $1 Severity level (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL).
+# @param $2 Main log message.
+# @param $3 [Optional] Extended details for the log entry.
+# @param $4 [Optional] Debug flag. Pass "debug" to enable debug output.
+#
+# @return None
+#
+# @example
+# log_message_with_severity "ERROR" /
+#   "This is an error message" "Additional details" "debug"
+# -----------------------------------------------------------------------------
+log_message_with_severity() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Exit if the calling function is not one of the allowed ones.
+    # shellcheck disable=2076
+    if [[ ! "logD logI logW logE logC logX" =~ "${FUNCNAME[1]}" ]]; then
+        warn "Invalid calling function: ${FUNCNAME[1]}"
+            debug_end "$debug"
+        exit 1
+    fi
+
+    # Initialize variables
+    local severity="INFO" # Default to INFO
+    local message=""
+    local extended_message=""
+
+    # Get level if it exists (must be one of the predefined values)
+    if [[ -n "$1" && "$1" =~ ^(DEBUG|INFO|WARNING|ERROR|CRITICAL|EXTENDED)$ ]]; then
+        severity="$1"
+    fi
+
+    # Process arguments
+    if [[ -n "$2" ]]; then
+        message="$2"
+    else
+        warn "Message is required."
+        debug_end "$debug"
+        return 1
+    fi
+
+    if [[ -n "$3" ]]; then
+        extended_message="$3"
+    fi
+
+    # Print debug information if the flag is set
+    debug_print "Logging message at severity '$severity' with message='$message'." "$debug"
+    debug_print "Extended message: '$extended_message'" "$debug"
+
+    # Log the primary message
+    log_message "$severity" "$message" "$debug"
+
+    # Log the extended message if present
+    if [[ -n "$extended_message" ]]; then
+        logX "$extended_message" "$debug"
+    fi
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Logging wrapper functions for various severity levels.
+# @details These functions provide shorthand access to
+#          `log_message_with_severity()` with a predefined severity level. They
+#          standardize the logging process by ensuring consistent severity
+#          labels and argument handling.
+#
+# @param $1 [string] The primary log message. Must not be empty.
+# @param $2 [optional, string] The extended message for additional details
+#           (optional), sent to logX.
+# @param $3 [optional, string] The debug flag. If set to "debug", enables
+#           debug-level logging.
+#
+# @global None
+#
+# @return None
+#
+# @functions
+# - logD(): Logs a message with severity level "DEBUG".
+# - logI(): Logs a message with severity level "INFO".
+# - logW(): Logs a message with severity level "WARNING".
+# - logE(): Logs a message with severity level "ERROR".
+# - logC(): Logs a message with severity level "CRITICAL".
+# - logX(): Logs a message with severity level "EXTENDED".
+#
+# @example
+#   logD "Debugging application startup."
+#   logI "Application initialized successfully."
+#   logW "Configuration file is missing a recommended value."
+#   logE "Failed to connect to the database."
+#   logC "System is out of memory and must shut down."
+#   logX "Additional debug information for extended analysis."
+# -----------------------------------------------------------------------------
+# shellcheck disable=2317
+logD() { log_message_with_severity "DEBUG" "${1:-}" "${2:-}" "${3:-}"; }
+# shellcheck disable=2317
+logI() { log_message_with_severity "INFO" "${1:-}" "${2:-}" "${3:-}"; }
+# shellcheck disable=2317
+logW() { log_message_with_severity "WARNING" "${1:-}" "${2:-}" "${3:-}"; }
+# shellcheck disable=2317
+logE() { log_message_with_severity "ERROR" "${1:-}" "${2:-}" "${3:-}"; }
+# shellcheck disable=2317
+logC() { log_message_with_severity "CRITICAL" "${1:-}" "${2:-}" "${3:-}"; }
+# shellcheck disable=2317
+logX() { log_message_with_severity "EXTENDED" "${1:-}" "${2:-}" "${3:-}"; }
+
+# -----------------------------------------------------------------------------
+# @brief Ensure the log file exists and is writable, with fallback to `/tmp` if
+#        necessary.
+# @details This function validates the specified log file's directory to ensure
+#          it exists and is writable. If the directory is invalid or
+#          inaccessible, it attempts to create it. If all else fails, the log
+#          file is redirected to `/tmp`. A warning message is logged if
+#          fallback is used.
+#
+# @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
+#
+# @global LOG_FILE Path to the log file (modifiable to fallback location).
+# @global THIS_SCRIPT The name of the script (used to derive fallback log file
+#         name).
+#
+# @return None
+#
+# @example
+# init_log "debug"  # Ensures log file is created and available for writing
+#                   # with debug output.
+# -----------------------------------------------------------------------------
+init_log() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    local scriptname="${THIS_SCRIPT%%.*}"  # Extract script name without extension
+    local homepath log_dir fallback_log
+
+    # Get the home directory of the current user
+    homepath=$(
+        getent passwd "${SUDO_USER:-$(whoami)}" | {
+            IFS=':' read -r _ _ _ _ _ homedir _
+            printf "%s" "$homedir"
+        }
+    )
+
+    # Determine the log file location
+    LOG_FILE="${LOG_FILE:-$homepath/$scriptname.log}"
+
+    # Extract the log directory from the log file path
+    log_dir="${LOG_FILE%/*}"
+
+    # Check if the log directory exists and is writable
+    debug_print "Checking if log directory '$log_dir' exists and is writable." "$debug"
+
+    if [[ -d "$log_dir" && -w "$log_dir" ]]; then
+        # Attempt to create the log file
+        if ! touch "$LOG_FILE" &>/dev/null; then
+            warn "Cannot create log file: $LOG_FILE"
+            log_dir="/tmp"
+        else
+            # Change ownership of the log file if possible
+            if [[ -n "${SUDO_USER:-}" && "${REQUIRE_SUDO:-true}" == "true" ]]; then
+                chown "$SUDO_USER:$SUDO_USER" "$LOG_FILE" &>/dev/null || warn "Failed to set ownership to SUDO_USER: $SUDO_USER"
+            else
+                chown "$(whoami):$(whoami)" "$LOG_FILE" &>/dev/null || warn "Failed to set ownership to current user: $(whoami)"
+            fi
+        fi
+    else
+        log_dir="/tmp"
+    fi
+
+    # Fallback to /tmp if the directory is invalid
+    if [[ "$log_dir" == "/tmp" ]]; then
+        fallback_log="/tmp/$scriptname.log"
+        LOG_FILE="$fallback_log"
+        debug_print "Falling back to log file in /tmp: $LOG_FILE" "$debug"
+        warn "Falling back to log file in /tmp: $LOG_FILE"
+    fi
+
+    # Attempt to create the log file in the fallback location
+    if ! touch "$LOG_FILE" &>/dev/null; then
+            debug_end "$debug"
+        die 1 "Unable to create log file even in fallback location: $LOG_FILE"
+    fi
+
+    # Final debug message after successful log file setup
+    debug_print "Log file successfully created at: $LOG_FILE" "$debug"
+
+    readonly LOG_FILE
+    export LOG_FILE
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
 # @brief Retrieve the terminal color code or attribute.
 #
 # @details This function uses `tput` to retrieve a terminal color code or
@@ -1798,7 +2181,6 @@ init_colors() {
 
     # General text attributes
     BOLD=$(default_color bold)
-    # shellcheck disable=SC2034
     DIM=$(default_color dim)
     SMSO=$(default_color smso)
     RMSO=$(default_color rmso)
@@ -1841,15 +2223,203 @@ init_colors() {
     RESET=$(default_color sgr0)
 
     # Set variables as readonly
-    # shellcheck disable=2303
     # shellcheck disable=SC2034
-    readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE
+    readonly RESET BOLD SMSO RMSO UNDERLINE NO_UNDERLINE DIM
     # shellcheck disable=SC2034
     readonly BLINK NO_BLINK ITALIC NO_ITALIC MOVE_UP CLEAR_LINE
     # shellcheck disable=SC2034
     readonly FGBLK FGRED FGGRN FGYLW FGBLU FGMAG FGCYN FGWHT FGRST FGGLD
     # shellcheck disable=SC2034
     readonly BGBLK BGRED BGGRN BGYLW BGBLU BGMAG BGCYN BGWHT BGRST
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Generate a separator string for terminal output.
+# @details Creates heavy or light horizontal rules based on terminal width.
+#          Optionally outputs debug information if the debug flag is set.
+#
+# @param $1 Type of rule: "heavy" or "light".
+# @param $2 [Optional] Debug flag. Pass "debug" to enable debug output.
+#
+# @return The generated rule string or error message if an invalid type is
+#         provided.
+#
+# @example
+# generate_separator "heavy"
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+generate_separator() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Normalize separator type to lowercase
+    local type="${1,,}"
+    local width="${COLUMNS:-80}"
+
+    # Validate separator type
+    if [[ "$type" != "heavy" && "$type" != "light" ]]; then
+        warn "Invalid separator type: '$1'. Must be 'heavy' or 'light'."
+            debug_end "$debug"
+        return 1
+    fi
+
+    # Generate the separator based on type
+    case "$type" in
+        heavy)
+            # Generate a heavy separator (═)
+            printf '═%.0s' $(seq 1 "$width")
+            ;;
+        light)
+            # Generate a light separator (─)
+            printf '─%.0s' $(seq 1 "$width")
+            ;;
+        *)
+            # Handle invalid separator type
+            warn "Invalid separator type: $type"
+                    debug_end "$debug"
+            return 1
+            ;;
+    esac
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Validate the logging configuration, including LOG_LEVEL.
+# @details This function checks whether the current LOG_LEVEL is valid. If
+#          LOG_LEVEL is not defined in the `LOG_PROPERTIES` associative array,
+#          it defaults to "INFO" and displays a warning message.
+#
+# @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
+#
+# @global LOG_LEVEL The current logging verbosity level.
+# @global LOG_PROPERTIES Associative array defining log level properties.
+#
+# @return void
+#
+# @example
+# validate_log_level "debug"  # Enables debug output
+# validate_log_level          # No debug output
+# -----------------------------------------------------------------------------
+validate_log_level() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Ensure LOG_LEVEL is a valid key in LOG_PROPERTIES
+    if [[ -z "${LOG_PROPERTIES[$LOG_LEVEL]:-}" ]]; then
+        # Print error message if LOG_LEVEL is invalid
+        warn "Invalid LOG_LEVEL '$LOG_LEVEL'. Defaulting to 'INFO'."
+        LOG_LEVEL="INFO"  # Default to "INFO"
+    fi
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Sets up the logging environment for the script.
+#
+# @details
+# This function initializes terminal colors, configures the logging
+# environment, defines log properties, and validates both the log level and
+# properties. It must be called before any logging-related functions.
+#
+# - Initializes terminal colors using `init_colors`.
+# - Sets up the log file and directory using `init_log`.
+# - Defines global log properties (`LOG_PROPERTIES`), including severity
+#   levels, colors, and labels.
+# - Validates the configured log level and ensures all required log properties
+#   are defined.
+#
+# @note This function should be called once during script initialization.
+#
+# @param $1 [Optional] Debug flag. Pass "debug" to enable debug output.
+#
+# @return void
+# -----------------------------------------------------------------------------
+setup_log() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Initialize terminal colors
+    init_colors "$debug"
+
+    # Initialize logging environment
+    init_log "$debug"
+
+    # Define log properties (severity, colors, and labels)
+    declare -gA LOG_PROPERTIES=(
+        ["DEBUG"]="DEBUG|${FGCYN}|0"
+        ["INFO"]="INFO |${FGGRN}|1"
+        ["WARNING"]="WARN |${FGGLD}|2"
+        ["ERROR"]="ERROR|${FGMAG}|3"
+        ["CRITICAL"]="CRIT |${FGRED}|4"
+        ["EXTENDED"]="EXTD |${FGBLU}|0"
+    )
+
+    # Debug message for log properties initialization
+    if [[ "$debug" == "debug" ]]; then
+        printf "[DEBUG] Log properties initialized:\n" >&2
+
+        # Iterate through LOG_PROPERTIES to print each level with its color
+        for level in DEBUG INFO WARNING ERROR CRITICAL EXTENDED; do
+            IFS="|" read -r custom_level color severity <<< "${LOG_PROPERTIES[$level]}"
+            printf "[DEBUG] %s: %b%s%b\n" "$level" "$color" "$custom_level" "$RESET" >&2
+        done
+    fi
+
+    # Validate the log level and log properties
+    validate_log_level "$debug"
+
+    debug_end "$debug"
+    return 0
+}
+
+# -----------------------------------------------------------------------------
+# @brief Toggle the USE_CONSOLE variable on or off.
+# @details This function updates the global USE_CONSOLE variable to either
+#          "true" (on) or "false" (off) based on the input argument. It also
+#          prints debug messages when the debug flag is passed.
+#
+# @param $1 The desired state: "on" (to enable console logging) or "off" (to
+#           disable console logging).
+# @param $2 [Optional] Debug flag. Pass "debug" to enable debug output.
+#
+# @global USE_CONSOLE The flag to control console logging.
+#
+# @return 0 on success, 1 on invalid input.
+# -----------------------------------------------------------------------------
+# shellcheck disable=SC2317
+toggle_console_log() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+
+    # Declare local variables
+    local state="${1,,}"      # Convert input to lowercase for consistency
+
+    # Validate $state
+    if [[ "$state" != "on" && "$state" != "off" ]]; then
+        warn "Invalid state: '$state'. Must be 'on' or 'off'."
+            debug_end "$debug"
+        return 1
+    fi
+
+    # Process the desired state
+    case "$state" in
+        on)
+            USE_CONSOLE="true"
+            debug_print "Console logging enabled. USE_CONSOLE='$USE_CONSOLE', CONSOLE_STATE='$CONSOLE_STATE'" "$debug"
+            ;;
+        off)
+            USE_CONSOLE="false"
+            debug_print "Console logging disabled. USE_CONSOLE='$USE_CONSOLE', CONSOLE_STATE='$CONSOLE_STATE'" "$debug"
+            ;;
+        *)
+            warn "Invalid argument for toggle_console_log: $state"
+                    debug_end "$debug"
+            return 1
+            ;;
+    esac
 
     debug_end "$debug"
     return 0
@@ -2778,7 +3348,7 @@ update_ap_ssid() {
                 "$FGYLW" "$RESET" "$FGGRN" "$new_ssid" "$RESET"
 
         else
-            logE "Invalid SSID. Must be 1-32 printable characters with no leading/trailing spaces."
+            printf "Invalid SSID. Must be 1-32 printable characters with no leading/trailing spaces.\n"
             return
         fi
     else
@@ -2803,7 +3373,7 @@ update_ap_password() {
             AP_PASSWORD="$new_pw"
             save_config
         else
-            logE "Invalid password. Must be 8-63 printable characters with no leading/trailing spaces."
+            printf "Invalid password. Must be 8-63 printable characters with no leading/trailing spaces.\n"
         fi
     else
         printf "Keeping the current password.\n"
@@ -2812,7 +3382,7 @@ update_ap_password() {
 
 update_ap_ip() {
     clear
-    local choice third_octet fourth_octet base new_ip new_gateway confirm
+    local choice second_octet third_octet fourth_octet base new_ip new_gateway confirm
 
     # Display current AP configuration
     printf ">> ${FGYLW}Current AP IP:${RESET} ${FGGRN}%s${RESET}\n" "$AP_CIDR"
@@ -2821,32 +3391,41 @@ update_ap_ip() {
     printf "1   192.168.xxx.xxx\n"
     printf "2   172.16.xxx.xxx\n"
     printf "3   10.0.xxx.xxx\n"
-    printf "\nPress Enter to return to the previous menu.\n\n"
+    printf "\nPress Enter to return to the previous menu. "
 
     # Read user choice
     read -n 1 -sr choice || true
     printf "\n"
 
     case "$choice" in
-        1) base="192.168." ;;
-        2) base="172.16." ;;
-        3) base="10.0." ;;
+        3)
+            base=${base:-"10."}
+            printf "\nEnter the second octet (0-255): "
+            read -r second_octet
+            if ! validate_host_number "$second_octet" 255; then return; fi
+            second_octet=$((10#$second_octet))
+            ;;
+        2|3)
+            base=${base:-"172.16."}
+            printf "\nEnter the third octet (0-255): "
+            read -r third_octet
+            if ! validate_host_number "$third_octet" 255; then return; fi
+            third_octet=$((10#$third_octet))
+            base="${base}${third_octet}."
+            ;;
+        1|2|3)
+            base=${base:-"192.168.0"}
+            printf "\nEnter the fourth octet (0-253): "
+            read -r fourth_octet
+            if ! validate_host_number "$fourth_octet" 253; then return; fi
+            fourth_octet=$((10#$fourth_octet))
+            base="${base}${fourth_octet}"
+            ;;
         "") return ;;  # Return on empty input (Enter)
         *) printf "%s\n" "Invalid selection." ; return ;;
     esac
 
-    printf "\nEnter the third octet (0-255):\n"
-    read -r third_octet
-    if ! validate_host_number "$third_octet" 255; then return; fi
-
-    printf "\nEnter the fourth octet (0-253):\n"
-    read -r fourth_octet
-    if ! validate_host_number "$fourth_octet" 253; then return; fi
-
-    third_octet=$((10#$third_octet))
-    fourth_octet=$((10#$fourth_octet))
-
-    new_ip="${base}${third_octet}.${fourth_octet}/24"
+    new_ip="${base}/24"
     new_gateway="${base}${third_octet}.254"
 
     if ! validate_subnet "$new_ip" "$new_gateway"; then return; fi
@@ -2860,14 +3439,14 @@ update_ap_ip() {
     printf "\n"
 
     printf "Apply these changes? (y/N): "
-    read -n 1 -t 5 -sr confirm || true
+    read -n 1 -sr confirm
     printf "\n"
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
         AP_CIDR="$new_ip"
         AP_GATEWAY="$new_gateway"
         save_config
     else
-        logI "Changes canceled."
+        printf "Changes canceled.\n"
     fi
 }
 
@@ -2992,23 +3571,23 @@ validate_ap_configuration() {
 
     # Check for conflicts with existing networks
     if ! validate_network_conflict "$new_subnet"; then
-        logE "The selected subnet conflicts with an existing network."
+        printf "The selected subnet conflicts with an existing network.\n"
         return 1
     fi
 
     # Check if gateway is in use
     if ping -c 1 "${new_gateway%%/*}" &>/dev/null; then
-        logE "The selected gateway IP $new_gateway is already in use."
+        printf "The selected gateway IP %s is already in use.\n" "$new_gateway"
         return 1
     fi
 
     # Check subnet validity
     if ! validate_subnet "$new_subnet" "$new_gateway"; then
-        logE "Invalid subnet or gateway configuration."
+        printf "Invalid subnet or gateway configuration.\n"
         return 1
     fi
 
-    logI "AP configuration validated successfully."
+    printf "AP configuration validated successfully.\n"
     return 0
 }
 
@@ -3017,25 +3596,25 @@ validate_hostname() {
 
     # Check if the hostname is empty
     if [[ -z "$hostname" ]]; then
-        logE "Error: Hostname cannot be empty."
+        printf "Hostname cannot be empty.\n"
         return 1
     fi
 
     # Check length (1 to 63 characters)
     if [[ ${#hostname} -lt 1 || ${#hostname} -gt 63 ]]; then
-        logE "Error: Hostname must be between 1 and 63 characters."
+        printf "Hostname must be between 1 and 63 characters.\n"
         return 1
     fi
 
     # Check if the hostname starts or ends with a hyphen or period
     if [[ "$hostname" =~ ^[-.] || "$hostname" =~ [-.]$ ]]; then
-        logE "Error: Hostname cannot start or end with a hyphen or period."
+        printf "Hostname cannot start or end with a hyphen or period.\n"
         return 1
     fi
 
     # Check for valid characters (alphanumeric and hyphen only)
     if [[ ! "$hostname" =~ ^[a-zA-Z0-9-]+$ ]]; then
-        logE "Error: Hostname can only contain alphanumeric characters and hyphens."
+        printf "Hostname can only contain alphanumeric characters and hyphens.\n"
         return 1
     fi
 
@@ -3047,10 +3626,8 @@ validate_host_number() {
     local num="$1"
     local max="$2"  # Maximum allowed value
 
-    if [[ "$num" =~ ^[0-9]+$ ]] && [ "$num" -ge 0 ] && [ "$num" -le "$max" ]; then
-        echo true
-    else
-        logW "Invalid input. Must be a number between 0 and $max."
+    if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 0 ] || [ "$num" -gt "$max" ]; then
+        printf "Invalid input. Must be a number between 0 and %d.\n" "$max"
         echo
     fi
 }
@@ -3065,7 +3642,7 @@ validate_network_conflict() {
     # Check for overlap
     for net in $active_networks; do
         if [[ "$new_subnet" == "$net" ]]; then
-            logE "Conflict detected with active network: $net"
+            printf "Conflict detected with active network: %s\n" "$net"
             return 1
         fi
     done
@@ -3080,7 +3657,7 @@ validate_subnet() {
     if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/24$ ]] && [[ "$gw" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         return 0  # Valid
     else
-        logW "Invalid subnet or gateway."
+        printf "Invalid subnet or gateway.\n"
         return 1  # Invalid
     fi
 }
