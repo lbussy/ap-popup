@@ -24,7 +24,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 #!/bin/bash
 
-# Global configuration variables (overridden by /etc/ap_popup.conf)
+# Global configuration variables (overridden by /etc/appop.conf)
 # @brief WiFi interface used by the Access Point.
 WIFI_INTERFACE="${WIFI_INTERFACE:-wlan0}"
 
@@ -37,11 +37,11 @@ AP_SSID="${AP_SSID:-AP_Pop-Up}"
 # @brief Access Point password.
 AP_PASSWORD="${AP_PASSWORD:-1234567890}"
 
-# @brief Access Point CIDR address (e.g., 192.168.50.5/24).
-AP_CIDR="${AP_CIDR:-192.168.50.5/24}"
+# @brief Access Point IP/CIDR (e.g., 192.168.50.5/24).
+AP_IP="${AP_IP:-192.168.50.5/24}"
 
 # @brief Access Point gateway IP.
-AP_GATEWAY="${AP_GATEWAY:-192.168.50.254}"
+AP_GW="${AP_GW:-192.168.50.254}"
 
 # @brief If 'y', enable WiFi if currently disabled.
 ENABLE_WIFI="${ENABLE_WIFI:-y}"
@@ -179,8 +179,8 @@ create_ap_profile() {
 
     nmcli connection modify "$AP_PROFILE_NAME" \
         ipv4.method shared \
-        ipv4.addr "$AP_CIDR" \
-        ipv4.gateway "$AP_GATEWAY" \
+        ipv4.addr "$AP_IP" \
+        ipv4.gateway "$AP_GW" \
         wifi.powersave disable
 
     GLOBAL_SAVED_AP_PROFILES+=("$AP_PROFILE_NAME")

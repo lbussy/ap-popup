@@ -85,12 +85,12 @@ set +o noclobber
 #          value meets your security requirements.
 # @default "1234567890"
 #
-# @var AP_CIDR
+# @var AP_IP
 # @brief Access Point CIDR.
 # @details The CIDR block used by the Access Point for assigning IP addresses.
 # @default "192.168.50.5/16"
 #
-# @var AP_GATEWAY
+# @var AP_GW
 # @brief Access Point Gateway.
 # @details The gateway address for the Access Point.
 # @default "192.168.50.254"
@@ -103,13 +103,13 @@ set +o noclobber
 # @note To override these values, source the configuration file at runtime:
 #       source /etc/appop.conf
 # -----------------------------------------------------------------------------
-declare WIFI_INTERFACE="wlan0"             # WiFi interface used by the Access Point
-declare AP_PROFILE_NAME="AP_Pop-Up"        # Access Point profile name
-declare AP_SSID="AP_Pop-Up"                # Access Point SSID
-declare AP_PASSWORD="1234567890"           # Access Point password
-declare AP_CIDR="192.168.50.5/16"          # Access Point CIDR
-declare AP_GATEWAY="192.168.50.254"        # Access Point Gateway
-declare ENABLE_WIFI="y"                    # Enable WiFi automatically if disabled
+declare WIFI_INTERFACE="wlan0"      # WiFi interface used by the Access Point
+declare AP_PROFILE_NAME="AP_Pop-Up" # Access Point profile name
+declare AP_SSID="AP_Pop-Up"         # Access Point SSID
+declare AP_PASSWORD="1234567890"    # Access Point password
+declare AP_IP="192.168.50.5/16"     # Access Point CIDR
+declare AP_GW="192.168.50.254"      # Access Point Gateway
+declare ENABLE_WIFI="y"             # Enable WiFi automatically if disabled
 
 # -----------------------------------------------------------------------------
 # @var REQUIRE_SUDO
@@ -3046,8 +3046,66 @@ usage() {
 }
 
 ############
-### Display Configured Networks Functions
+### Handle AP Configuration
 ############
+
+update_ap_ssid() {
+    clear
+
+    printf "\n"
+    printf ">> ${FGYLW}Current AP SSID:${RESET} ${FGGRN}%s${RESET}\n" "$AP_SSID"
+    printf "\n"
+    printf "Enter new SSID (1-32 characters, no leading/trailing spaces, Enter to keep current):\n"
+
+    read -r new_ssid
+
+    # Trim and validate SSID
+    new_ssid=$(printf "%s" "$new_ssid" | xargs | sed -e 's/^"//' -e 's/"$//')
+    if [[ -n "$new_ssid" ]]; then
+        if [[ ${#new_ssid} -ge 1 && ${#new_ssid} -le 32 && "$new_ssid" =~ ^[[:print:]]+$ && "$new_ssid" != *" "* ]]; then
+            AP_SSID="$new_ssid"
+            save_config
+                "$FGYLW" "$RESET" "$FGGRN" "$new_ssid" "$RESET"
+
+        else
+            printf "Invalid SSID. Must be 1-32 printable characters with no leading/trailing spaces.\n"
+            return
+        fi
+    else
+        printf "Keeping the current SSID.\n"
+    fi
+}
+
+update_ap_password() {
+    clear
+
+    printf "\n"
+    printf ">> ${FGYLW}Current AP Password:${RESET} ${FGGRN}%s${RESET}\n" "$AP_PASSWORD"
+    printf "\n"
+    printf "Enter new password (8-63 printable characters with no leading/trailing spaces, Enter to keep current):\n"
+
+    read -r new_pw
+
+    # Trim and validate password
+    new_pw=$(printf "%s" "$new_pw" | xargs)
+    if [[ -n "$new_pw" ]]; then
+        if [[ ${#new_pw} -ge 8 && ${#new_pw} -le 63 && "$new_pw" =~ ^[[:print:]]+$ ]]; then
+            AP_PASSWORD="$new_pw"
+            save_config
+        else
+            printf "Invalid password. Must be 8-63 printable characters with no leading/trailing spaces.\n"
+        fi
+    else
+        printf "Keeping the current password.\n"
+    fi
+}
+
+# TODO HERE::
+
+############
+### Handle Configured Networks Functions
+############
+
 # shellcheck disable=SC2317
 show_wifi_connection_details() {
     # TODO - Do somethign with this
@@ -3329,127 +3387,6 @@ force_auto_negotiate() {
     debug_end "$debug"
 }
 
-update_ap_ssid() {
-    clear
-
-    printf "\n"
-    printf ">> ${FGYLW}Current AP SSID:${RESET} ${FGGRN}%s${RESET}\n" "$AP_SSID"
-    printf "\n"
-    printf "Enter new SSID (1-32 characters, no leading/trailing spaces, Enter to keep current):\n"
-
-    read -r new_ssid
-
-    # Trim and validate SSID
-    new_ssid=$(printf "%s" "$new_ssid" | xargs | sed -e 's/^"//' -e 's/"$//')
-    if [[ -n "$new_ssid" ]]; then
-        if [[ ${#new_ssid} -ge 1 && ${#new_ssid} -le 32 && "$new_ssid" =~ ^[[:print:]]+$ && "$new_ssid" != *" "* ]]; then
-            AP_SSID="$new_ssid"
-            save_config
-                "$FGYLW" "$RESET" "$FGGRN" "$new_ssid" "$RESET"
-
-        else
-            printf "Invalid SSID. Must be 1-32 printable characters with no leading/trailing spaces.\n"
-            return
-        fi
-    else
-        printf "Keeping the current SSID.\n"
-    fi
-}
-
-update_ap_password() {
-    clear
-
-    printf "\n"
-    printf ">> ${FGYLW}Current AP Password:${RESET} ${FGGRN}%s${RESET}\n" "$AP_PASSWORD"
-    printf "\n"
-    printf "Enter new password (8-63 printable characters with no leading/trailing spaces, Enter to keep current):\n"
-
-    read -r new_pw
-
-    # Trim and validate password
-    new_pw=$(printf "%s" "$new_pw" | xargs)
-    if [[ -n "$new_pw" ]]; then
-        if [[ ${#new_pw} -ge 8 && ${#new_pw} -le 63 && "$new_pw" =~ ^[[:print:]]+$ ]]; then
-            AP_PASSWORD="$new_pw"
-            save_config
-        else
-            printf "Invalid password. Must be 8-63 printable characters with no leading/trailing spaces.\n"
-        fi
-    else
-        printf "Keeping the current password.\n"
-    fi
-}
-
-update_ap_ip() {
-    clear
-    local choice second_octet third_octet fourth_octet base new_ip new_gateway confirm
-
-    # Display current AP configuration
-    printf ">> ${FGYLW}Current AP IP:${RESET} ${FGGRN}%s${RESET}\n" "$AP_CIDR"
-    printf ">> ${FGYLW}Current AP GW:${RESET} ${FGGRN}%s${RESET}\n" "$AP_GATEWAY"
-    printf "\nChoose a new network:\n"
-    printf "1   192.168.xxx.xxx\n"
-    printf "2   172.16.xxx.xxx\n"
-    printf "3   10.0.xxx.xxx\n"
-    printf "\nPress Enter to return to the previous menu. "
-
-    # Read user choice
-    read -n 1 -sr choice || true
-    printf "\n"
-
-    case "$choice" in
-        3)
-            base=${base:-"10."}
-            printf "\nEnter the second octet (0-255): "
-            read -r second_octet
-            if ! validate_host_number "$second_octet" 255; then return; fi
-            second_octet=$((10#$second_octet))
-            ;;
-        2|3)
-            base=${base:-"172.16."}
-            printf "\nEnter the third octet (0-255): "
-            read -r third_octet
-            if ! validate_host_number "$third_octet" 255; then return; fi
-            third_octet=$((10#$third_octet))
-            base="${base}${third_octet}."
-            ;;
-        1|2|3)
-            base=${base:-"192.168.0"}
-            printf "\nEnter the fourth octet (0-253): "
-            read -r fourth_octet
-            if ! validate_host_number "$fourth_octet" 253; then return; fi
-            fourth_octet=$((10#$fourth_octet))
-            base="${base}${fourth_octet}"
-            ;;
-        "") return ;;  # Return on empty input (Enter)
-        *) printf "%s\n" "Invalid selection." ; return ;;
-    esac
-
-    new_ip="${base}/24"
-    new_gateway="${base}${third_octet}.254"
-
-    if ! validate_subnet "$new_ip" "$new_gateway"; then return; fi
-
-    printf "\nValidating network configuration, this will take a moment.\n"
-    if ! validate_ap_configuration "$new_ip" "$new_gateway"; then return; fi
-
-    printf "\n"
-    printf "<< ${FGYLW}New AP IP will be:${RESET} ${FGGRN}%s${RESET}\n" "$new_ip"
-    printf "<< ${FGYLW}New AP GW will be:${RESET} ${FGGRN}%s${RESET}\n" "$new_gateway"
-    printf "\n"
-
-    printf "Apply these changes? (y/N): "
-    read -n 1 -sr confirm
-    printf "\n"
-    if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        AP_CIDR="$new_ip"
-        AP_GATEWAY="$new_gateway"
-        save_config
-    else
-        printf "Changes canceled.\n"
-    fi
-}
-
 upgrade_utility() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -3509,6 +3446,39 @@ update_hostname() {
     fi
 }
 
+# TODO: Do we use this?
+validate_hostname() {
+    local hostname="$1"
+
+    # Check if the hostname is empty
+    if [[ -z "$hostname" ]]; then
+        printf "Hostname cannot be empty.\n"
+        return 1
+    fi
+
+    # Check length (1 to 63 characters)
+    if [[ ${#hostname} -lt 1 || ${#hostname} -gt 63 ]]; then
+        printf "Hostname must be between 1 and 63 characters.\n"
+        return 1
+    fi
+
+    # Check if the hostname starts or ends with a hyphen or period
+    if [[ "$hostname" =~ ^[-.] || "$hostname" =~ [-.]$ ]]; then
+        printf "Hostname cannot start or end with a hyphen or period.\n"
+        return 1
+    fi
+
+    # Check for valid characters (alphanumeric and hyphen only)
+    if [[ ! "$hostname" =~ ^[a-zA-Z0-9-]+$ ]]; then
+        printf "Hostname can only contain alphanumeric characters and hyphens.\n"
+        return 1
+    fi
+
+    # If all checks pass, return success
+    return 0
+}
+
+# TODO: Not sure we are using this version
 update_wifi_profile() {
     local ssid="$1"
     local password=""
@@ -3562,103 +3532,6 @@ update_wifi_profile() {
         else
             printf "Password must be at least 8 characters. No profile was created.\n"
         fi
-    fi
-}
-
-validate_ap_configuration() {
-    local new_subnet="$1"
-    local new_gateway="$2"
-
-    # Check for conflicts with existing networks
-    if ! validate_network_conflict "$new_subnet"; then
-        printf "The selected subnet conflicts with an existing network.\n"
-        return 1
-    fi
-
-    # Check if gateway is in use
-    if ping -c 1 "${new_gateway%%/*}" &>/dev/null; then
-        printf "The selected gateway IP %s is already in use.\n" "$new_gateway"
-        return 1
-    fi
-
-    # Check subnet validity
-    if ! validate_subnet "$new_subnet" "$new_gateway"; then
-        printf "Invalid subnet or gateway configuration.\n"
-        return 1
-    fi
-
-    printf "AP configuration validated successfully.\n"
-    return 0
-}
-
-validate_hostname() {
-    local hostname="$1"
-
-    # Check if the hostname is empty
-    if [[ -z "$hostname" ]]; then
-        printf "Hostname cannot be empty.\n"
-        return 1
-    fi
-
-    # Check length (1 to 63 characters)
-    if [[ ${#hostname} -lt 1 || ${#hostname} -gt 63 ]]; then
-        printf "Hostname must be between 1 and 63 characters.\n"
-        return 1
-    fi
-
-    # Check if the hostname starts or ends with a hyphen or period
-    if [[ "$hostname" =~ ^[-.] || "$hostname" =~ [-.]$ ]]; then
-        printf "Hostname cannot start or end with a hyphen or period.\n"
-        return 1
-    fi
-
-    # Check for valid characters (alphanumeric and hyphen only)
-    if [[ ! "$hostname" =~ ^[a-zA-Z0-9-]+$ ]]; then
-        printf "Hostname can only contain alphanumeric characters and hyphens.\n"
-        return 1
-    fi
-
-    # If all checks pass, return success
-    return 0
-}
-
-validate_host_number() {
-    local num="$1"
-    local max="$2"  # Maximum allowed value
-
-    if ! [[ "$num" =~ ^[0-9]+$ ]] || [ "$num" -lt 0 ] || [ "$num" -gt "$max" ]; then
-        printf "Invalid input. Must be a number between 0 and %d.\n" "$max"
-        echo
-    fi
-}
-
-validate_network_conflict() {
-    local new_subnet="$1"  # New AP subnet
-    local active_networks
-
-    # Get a list of active subnets
-    active_networks=$(ip -o -f inet addr show | awk '/scope global/ {split($4,a,"/"); print a[1] "/" $5}')
-
-    # Check for overlap
-    for net in $active_networks; do
-        if [[ "$new_subnet" == "$net" ]]; then
-            printf "Conflict detected with active network: %s\n" "$net"
-            return 1
-        fi
-    done
-
-    return 0
-}
-
-validate_subnet() {
-    local ip="$1"
-    local gw="$2"
-
-    if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/24$ ]] && [[ "$gw" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-        return 0  # Valid
-    else
-        printf "Invalid subnet or gateway.\n"
-        return 1  # Invalid
     fi
 }
 
@@ -3727,8 +3600,8 @@ save_config() {
         echo "AP_PROFILE_NAME=\"$AP_PROFILE_NAME\""
         echo "AP_SSID=\"$AP_SSID\""
         echo "AP_PASSWORD=\"$AP_PASSWORD\""
-        echo "AP_CIDR=\"$AP_CIDR\""
-        echo "AP_GATEWAY=\"$AP_GATEWAY\""
+        echo "AP_IP=\"$AP_IP\""
+        echo "AP_GW=\"$AP_GW\""
         echo "ENABLE_WIFI=\"$ENABLE_WIFI\""
     } > "$CONFIG_FILE"
     # shellcheck disable=SC2320
