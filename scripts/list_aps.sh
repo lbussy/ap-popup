@@ -235,7 +235,7 @@ populate_wifi_networks() {
 
 # -----------------------------------------------------------------------------
 # @brief Display Wi-Fi networks in a formatted table.
-# @details Outputs a table of Wi-Fi networks with selected columns and a 
+# @details Outputs a table of Wi-Fi networks with selected columns and a
 #          numeric index for user selection. Handles empty network list.
 # -----------------------------------------------------------------------------
 # shellcheck disable=SC2317
