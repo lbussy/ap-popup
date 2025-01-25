@@ -592,7 +592,8 @@ readonly SYSTEM_READS
 # done
 # -----------------------------------------------------------------------------
 readonly APT_PACKAGES=(
-    "jq"  # JSON parsing utility
+    "jq"        # JSON parsing utility
+    "ipcalc"    # An IPv4 Netmask/broadcast/etc calculator
 )
 
 # -----------------------------------------------------------------------------
