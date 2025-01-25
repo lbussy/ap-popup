@@ -6,6 +6,7 @@ set +o noclobber
 #########################################################################
 # TODO:
 #   - Develop man pages
+#   - Figure out if we need logging
 #   - Setup a New WiFi Network or Change Password fails to register choice
 #   - Examine: declare -ar SYSTEM_READS=()
 #   - Figure out:
@@ -3049,313 +3050,513 @@ usage() {
 ### Handle AP Configuration
 ############
 
+# -----------------------------------------------------------------------------
+# @brief Updates the Access Point (AP) SSID.
+# @details This function allows the user to update the global AP_SSID variable.
+#          It validates the SSID to ensure it meets length and character
+#          requirements, trims whitespace, and confirms saving the new
+#          configuration.
+#
+# @global AP_SSID The current SSID of the Access Point.
+#
+# @param $@ Debug flag (optional). If "debug" is provided, debug information
+#           will be printed.
+#
+# @return None.
+#
+# @example
+#   update_ap_ssid "debug"
+# -----------------------------------------------------------------------------
 update_ap_ssid() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     clear
 
-    printf "\n"
-    printf ">> ${FGYLW}Current AP SSID:${RESET} ${FGGRN}%s${RESET}\n" "$AP_SSID"
-    printf "\n"
-    printf "Enter new SSID (1-32 characters, no leading/trailing spaces, Enter to keep current):\n"
+    # Display current SSID
+    printf "Current AP SSID: %s\n\n" "$AP_SSID"
+    printf "Create a new SSID for the Access Point:\n"
+    printf "    %s\n" "- Must be 1-32 characters"
+    printf "    %s\n" "- No leading or trailing spaces"
+    printf "    %s\n" "- No embedded spaces"
+    printf "\nPress Enter to keep the current SSID.\n"
+    printf "> "
 
+    # Read the new SSID
     read -r new_ssid
 
     # Trim and validate SSID
-    new_ssid=$(printf "%s" "$new_ssid" | xargs | sed -e 's/^"//' -e 's/"$//')
-    if [[ -n "$new_ssid" ]]; then
-        if [[ ${#new_ssid} -ge 1 && ${#new_ssid} -le 32 && "$new_ssid" =~ ^[[:print:]]+$ && "$new_ssid" != *" "* ]]; then
-            AP_SSID="$new_ssid"
-            save_config
-                "$FGYLW" "$RESET" "$FGGRN" "$new_ssid" "$RESET"
+    new_ssid=$(printf "%s" "$new_ssid" | xargs)
+    debug_print "Trimmed new SSID: '$new_ssid'" "$debug"
 
+    if [[ -n "$new_ssid" ]]; then
+        if [[ ${#new_ssid} -ge 1 && ${#new_ssid} -le 32 && "$new_ssid" =~ ^[[:graph:]]+$ ]]; then
+            AP_SSID="$new_ssid"
+            printf "\nSSID updated to: %s\n" "$AP_SSID"
+            debug_print "Valid SSID: '$new_ssid'" "$debug"
+
+            # Confirmation loop to save the configuration
+            while :; do
+                read -rp "Do you want to save this new configuration? (y/n): " save_choice
+                case "$save_choice" in
+                    [Yy])
+                        save_config "$debug"
+                        printf "Configuration saved successfully.\n"
+                        break
+                        ;;
+                    [Nn])
+                        printf "Configuration was not saved.\n"
+                        break
+                        ;;
+                    *)
+                        printf "Invalid choice. Please enter 'y' or 'n'.\n"
+                        ;;
+                esac
+            done
         else
-            printf "Invalid SSID. Must be 1-32 printable characters with no leading/trailing spaces.\n"
-            return
+            printf "\nInvalid SSID. Must be 1-32 printable characters with no leading/trailing spaces.\n"
+            debug_print "Invalid SSID provided: '$new_ssid'" "$debug"
         fi
     else
-        printf "Keeping the current SSID.\n"
+        printf "\nKeeping the current SSID: %s\n" "$AP_SSID"
+        debug_print "No change to SSID. Current SSID retained: '$AP_SSID'" "$debug"
     fi
+    debug_end "$debug"
 }
 
+# -----------------------------------------------------------------------------
+# @brief Updates the Access Point (AP) password.
+# @details This function allows the user to update the global AP_PASSWORD
+#          variable. It validates the password to ensure it meets length and
+#          character requirements, trims whitespace, and confirms saving the
+#          new configuration.
+#
+# @global AP_PASSWORD The current password of the Access Point.
+#
+# @param $@ Debug flag (optional). If "debug" is provided, debug information
+#           will be printed.
+#
+# @return None.
+#
+# @example
+#   update_ap_password "debug"
+# -----------------------------------------------------------------------------
 update_ap_password() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
     clear
 
-    printf "\n"
-    printf ">> ${FGYLW}Current AP Password:${RESET} ${FGGRN}%s${RESET}\n" "$AP_PASSWORD"
-    printf "\n"
-    printf "Enter new password (8-63 printable characters with no leading/trailing spaces, Enter to keep current):\n"
+    # Display current password
+    printf "Current AP Password: %s\n\n" "$AP_PASSWORD"
+    printf "%s\n" "Create a new password for your Access Point"
+    printf "    %s\n" "-- Must be 8-63 characters"
+    printf "    %s\n" "-- No leading or trailing spaces"
+    printf "    %s\n" "-- Printable characters only"
+    printf "\nPress Enter to keep the current password.\n"
+    printf "> "
 
+    # Read the new password
     read -r new_pw
 
     # Trim and validate password
     new_pw=$(printf "%s" "$new_pw" | xargs)
+    debug_print "Trimmed new password: '$new_pw'" "$debug"
+
     if [[ -n "$new_pw" ]]; then
         if [[ ${#new_pw} -ge 8 && ${#new_pw} -le 63 && "$new_pw" =~ ^[[:print:]]+$ ]]; then
-            AP_PASSWORD="$new_pw"
-            save_config
+            debug_print "Valid password provided: '$new_pw'" "$debug"
+
+            # Confirmation loop to save the configuration
+            while :; do
+                read -rp "Do you want to save this password? (y/n): " save_choice
+                case "$save_choice" in
+                    [Yy])
+                        AP_PASSWORD="$new_pw"
+                        save_config "$debug"
+                        printf "Configuration saved successfully.\n"
+                        break
+                        ;;
+                    [Nn])
+                        printf "Configuration was not saved.\n"
+                        break
+                        ;;
+                    *)
+                        printf "Invalid choice. Please enter 'y' or 'n'.\n"
+                        ;;
+                esac
+            done
         else
-            printf "Invalid password. Must be 8-63 printable characters with no leading/trailing spaces.\n"
+            printf "\nInvalid password. Must be 8-63 printable characters with no leading/trailing spaces.\n"
+            debug_print "Invalid password provided: '$new_pw'" "$debug"
         fi
     else
-        printf "Keeping the current password.\n"
+        printf "\nKeeping the current password.\n"
+        debug_print "No change to password. Current password retained: '$AP_PASSWORD'" "$debug"
     fi
+    debug_end "$debug"
 }
 
-# TODO HERE::
+# -----------------------------------------------------------------------------
+# @brief Converts an IP address from dotted decimal format to an integer.
+# @details This function takes an IPv4 address in dotted decimal notation
+#          (e.g., 192.168.0.1) and converts it into a 32-bit integer. The
+#          conversion is done by treating each octet as a byte and shifting
+#          its value to the appropriate position in the 32-bit integer.
+#
+# @param $1 The IPv4 address in dotted decimal format (e.g., "192.168.0.1").
+#
+# @return Prints the 32-bit integer representation of the IP address.
+#
+# @example
+#   local int_ip
+#   int_ip=$(convert_ip_to_int "192.168.0.1")
+#   echo "$int_ip"  # Outputs: 3232235521
+# -----------------------------------------------------------------------------
+convert_ip_to_int() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local ip="$1"  # IPv4 address in dotted decimal format
+    IFS='.' read -r a b c d <<< "$ip"  # Split the IP address into four octets
+    local result=$(( a * 16777216 + b * 65536 + c * 256 + d ))  # Calculate integer
+    debug_end "$debug"
+    printf "%d\n" "$result"  # Output the integer representation of the IP address
+}
+
+# -----------------------------------------------------------------------------
+# @brief Calculates the subnet mask for a given CIDR value.
+# @details This function computes the subnet mask for an IPv4 address using the
+#          given CIDR value. The calculation avoids bitwise shifts to ensure
+#          compatibility with versions of Bash that may not support them.
+#
+# @param $1 The CIDR value (e.g., 24 for a /24 subnet).
+#
+# @return Prints the calculated subnet mask as an integer.
+#
+# @example
+#   local mask
+#   mask=$(calculate_mask 24)
+#   printf "Subnet mask: %d\n" "$mask"  # Outputs: 4294967040
+# -----------------------------------------------------------------------------
+calculate_mask() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local cidr="$1"               # The CIDR value for the subnet (0-32)
+    local full_mask=0xFFFFFFFF    # The full 32-bit mask in hexadecimal
+    local shift=$(( 32 - cidr ))  # Number of bits to shift for the mask
+
+    # Calculate the shifted mask using multiplication instead of bitwise shifts
+    local shifted_mask=$(( full_mask * (2 ** shift) ))
+
+    # Apply the full mask to ensure the result is valid
+    local mask=$(( shifted_mask & full_mask ))
+
+    # Print the calculated mask
+    debug_end "$debug"
+    printf "%d\n" "$mask"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Validates the format and compatibility of a subnet and gateway.
+# @details This function checks if the given subnet is in a valid CIDR format
+#          and if the gateway IP address falls within the subnet range. It
+#          ensures the subnet and gateway configuration is logically correct
+#          before applying it. The function also validates the IPv4 address
+#          format for both subnet and gateway.
+#
+# @param $1 The subnet to validate in CIDR format (e.g., 192.168.1.0/24).
+# @param $2 The gateway IP address to validate (e.g., 192.168.1.1).
+# @param $@ Debug flag (optional). If "debug" is provided, debug information
+#           will be printed.
+#
+# @return 0 if the subnet and gateway are valid.
+#         1 if the format is invalid or the gateway does not belong to the subnet.
+# -----------------------------------------------------------------------------
+validate_subnet() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local ip="$1"            # Subnet to validate (CIDR format)
+    local gw="$2"            # Gateway IP address to validate
+    local retval=0           # Return value (0 for valid, 1 for invalid)
+
+    # Validate IPv4 address format for subnet and gateway
+    if ! [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; then
+        printf "Invalid subnet format: %s\n" "$ip" >&2
+        debug_end "$debug"
+        return 1
+    fi
+    if ! [[ "$gw" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+        printf "Invalid gateway format: %s\n" "$gw" >&2
+        debug_end "$debug"
+        return 1
+    fi
+
+    # Extract the base IP and CIDR
+    local base_ip="${ip%%/*}"
+    local cidr="${ip##*/}"
+    local gw_ip="$gw"
+
+    # Validate CIDR range
+    if (( cidr < 0 || cidr > 32 )); then
+        printf "Invalid CIDR value: %s\n" "$cidr" >&2
+        debug_end "$debug"
+        return 1
+    fi
+
+    # Convert base IP and gateway IP to integers
+    local base_ip_int
+    base_ip_int=$(convert_ip_to_int "$base_ip")
+
+    local gw_ip_int
+    gw_ip_int=$(convert_ip_to_int "$gw_ip")
+
+    local mask
+    mask=$(calculate_mask "$cidr")
+
+    # Calculate the network range
+    local network=$(( base_ip_int & mask ))
+    local broadcast=$(( network | ~mask & 0xFFFFFFFF ))
+
+    debug_print "Calculated network: $network, mask: $mask, broadcast: $broadcast" "$debug"
+
+    # Check if the gateway is within the network range
+    if (( gw_ip_int < network || gw_ip_int > broadcast )); then
+        printf "Gateway %s is not within the subnet %s.\n" "$gw" "$ip" >&2
+        retval=1
+    fi
+
+    debug_print "Validation result: $retval" "$debug"
+    debug_end "$debug"
+    return "$retval"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Checks for conflicts between the provided subnet and active networks.
+# @details This function compares the given subnet against the subnets of all
+#          active network interfaces. If a conflict is detected, it reports the
+#          conflict and returns an error status. This ensures that the new
+#          subnet does not overlap with any existing network.
+#
+# @param $1 The new subnet for the AP in CIDR format (e.g., 192.168.1.0/24).
+# @param $@ Debug flag (optional). If "debug" is provided, debug information
+#           will be printed.
+#
+# @global None.
+#
+# @return 0 if no conflicts are found.
+#         1 if a conflict is detected with an active network.
+#
+# @example
+# validate_network_conflict "192.168.1.0/24" "debug"
+# -----------------------------------------------------------------------------
+validate_network_conflict() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local new_subnet="$1"     # The subnet to check for conflicts (CIDR format)
+    local active_networks     # List of active subnets on the system
+    local retval=0            # Return value (0 for no conflict, 1 for conflict)
+
+    # Retrieve a list of active subnets from the system's network interfaces
+    active_networks=$(ip -o -f inet addr show | awk '/scope global/ {print $4}')
+
+    # Iterate through each active subnet and check for conflicts
+    for net in $active_networks; do
+        if [[ "$new_subnet" == "$net" ]]; then
+            printf "Conflict detected with active network: %s\n" "$net" >&2
+            retval=1
+            break  # Exit the loop once a conflict is found
+        fi
+    done
+
+    # Ensure cleanup and exit with the appropriate return value
+    debug_end "$debug"
+    return "$retval"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Validates the Access Point (AP) subnet and gateway configuration.
+# @details This function performs multiple validation checks to ensure that the
+#          provided subnet and gateway are valid and do not conflict with
+#          existing networks or active IP addresses. The function checks for:
+#          - Conflicts with active network subnets.
+#          - Subnet and gateway format validity.
+#          - Whether the gateway IP is already in use.
+#
+# @param $1 The new subnet for the AP in CIDR format (e.g., 192.168.1.0/24).
+# @param $2 The new gateway IP address for the AP (e.g., 192.168.1.1).
+# @param $@ Debug flag (optional). If "debug" is provided, debug information
+#           will be printed.
+#
+# @global None.
+#
+# @return 0 if the configuration is valid.
+#         1 if a conflict or validation error occurs.
+#
+# @example
+# validate_ap_configuration "192.168.1.0/24" "192.168.1.1" "debug"
+# -----------------------------------------------------------------------------
+validate_ap_configuration() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local new_subnet="$1"
+    local new_gateway="$2"
+    local retval=0
+
+    debug_print "Validating new subnet: $new_subnet"
+    debug_print "Validating new gateway: $new_gateway"
+
+    # Check for conflicts with active network subnets
+    if ! validate_network_conflict "$new_subnet" "$debug"; then
+        debug_print "Subnet conflict detected for $new_subnet"
+        printf "The selected subnet conflicts with an existing network.\n" >&2
+        retval=1
+    # Check for validity of the subnet and gateway configuration
+    elif ! validate_subnet "$new_subnet" "$new_gateway" "$debug"; then
+        debug_print "Invalid subnet or gateway detected"
+        printf "Invalid subnet or gateway configuration.\n" >&2
+        retval=1
+    # Check if the gateway IP is already in use
+    elif ping -c 1 -w 1 "${new_gateway%%/*}" &>/dev/null; then
+        debug_print "Gateway $new_gateway is already in use"
+        printf "The gateway %s is already in use.\n" "$new_gateway" >&2
+        retval=1
+    fi
+
+    debug_print "Validation result: $retval"
+    debug_end "$debug"
+    return "$retval"
+}
+
+# -----------------------------------------------------------------------------
+# @brief Updates the Access Point (AP) IP address and network configuration.
+# @details This function prompts the user to select an IP address block and
+#          construct a new IP address, network, and gateway for the AP. The
+#          function validates the configuration and checks for conflicts or
+#          invalid inputs before applying the changes.
+#
+# @param $@ Debug flag (optional). If "debug" is provided, debug information
+#           will be printed.
+#
+# @global AP_IP Stores the current AP IP address in CIDR format.
+# @global AP_GW Stores the current AP gateway address.
+#
+# @return 0 if the IP address is successfully updated or the user exits,
+#         1 if an error occurs.
+#
+# @example
+# update_ap_ip "debug"
+# -----------------------------------------------------------------------------
+update_ap_ip() {
+    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
+    local base_ip=""          # Base IP address for the selected network block
+    local second_octet=""     # Second octet of the IP address
+    local third_octet=""      # Third octet of the IP address
+    local fourth_octet=""     # Fourth octet of the IP address
+    local ip_address=""       # Constructed IP address
+    local ip_network=""       # Constructed network address in CIDR format
+    local gateway=""          # Constructed gateway address
+
+    clear
+    printf "Current AP IP: %s\n" "$AP_IP"
+    printf "Current AP GW: %s\n" "$AP_GW"
+    printf "\nSelect an IP address block (press Enter to exit):\n\n"
+    printf "1   10.0.0.0/8\n"
+    printf "2   172.16.0.0/12\n"
+    printf "3   192.168.0.0/16\n\n"
+    read -n 1 -srp "Enter your choice (1-3): " choice
+    printf "\n"
+
+    # Exit if the user presses Enter without making a choice
+    [[ -z "$choice" ]] && { debug_end "$debug"; return 0; }
+
+    # Determine the base IP address and valid range based on the user's choice
+    case "$choice" in
+        1) base_ip="10"; range_msg="(0-255)" ;;       # 10.0.0.0/8 network
+        2) base_ip="172"; range_msg="(16-31)" ;;      # 172.16.0.0/12 network
+        3) base_ip="192.168"; range_msg="(0-255)" ;;  # 192.168.0.0/16 network
+        *) printf "Invalid choice.\n"; debug_end "$debug"; return 1 ;;
+    esac
+
+    printf "\nConstruct an IP address for AP within the selected network.\n\n"
+
+    # Prompt for the second octet
+    while :; do
+        read -rp "Enter the second octet ${range_msg}, or press Enter to exit: " second_octet
+        if [[ -z "$second_octet" ]]; then
+            debug_end "$debug"
+            return 0
+        fi
+        if [[ "$second_octet" =~ ^[0-9]+$ ]] && [[ "$choice" != 2 || "$second_octet" -ge 16 && "$second_octet" -le 31 ]]; then
+            break
+        fi
+        printf "Invalid input. Please enter a valid octet.\n"
+    done
+
+    # Prompt for the third octet (0-255)
+    while :; do
+        read -rp "Enter the third octet 0-255, or press Enter to exit: " third_octet
+        # Exit if the user presses Enter without providing input
+        if [[ -z "$third_octet" ]]; then
+            debug_end "$debug"
+            return 0
+        fi
+        # Validate the input: Must be a number between 0 and 255
+        if [[ "$third_octet" =~ ^[0-9]+$ ]] && (( third_octet >= 0 && third_octet <= 255 )); then
+            break  # Valid input, exit the loop
+        else
+            printf "Invalid input. Please enter a number between 0 and 255.\n" >&2
+        fi
+    done
+
+    # Prompt for the fourth octet (0-253)
+    while :; do
+        read -rp "Enter the fourth octet (0-253), or press Enter to exit: " fourth_octet
+        # Exit if the user presses Enter without providing input
+        if [[ -z "$fourth_octet" ]]; then
+            debug_end "$debug"
+            return 0
+        fi
+        # Validate the input: Must be a number between 0 and 253
+        if [[ "$fourth_octet" =~ ^[0-9]+$ ]] && (( fourth_octet >= 0 && fourth_octet <= 253 )); then
+            break  # Valid input, exit the loop
+        else
+            printf "Invalid input. Please enter a number between 0 and 253.\n" >&2
+        fi
+    done
+
+    # Construct the IP address, network, and gateway
+    ip_address="$base_ip.$second_octet.$third_octet.$fourth_octet"
+    ip_network="$base_ip.$second_octet.$third_octet.0/24"
+    gateway="$base_ip.$second_octet.$third_octet.254"
+    # Validate and apply the configuration
+    if validate_ap_configuration "$ip_network" "$gateway" "$debug"; then
+        printf "\nYour selected AP IP address: %s\n" "$ip_address"
+        printf "Your selected IP network: %s\n" "$ip_network"
+        printf "Gateway for this network: %s\n" "$gateway"
+
+        # Loop until the user provides a valid response
+        while :; do
+            read -rp "Do you want to save this configuration? (y/n): " save_choice
+            case "$save_choice" in
+                [Yy])
+                    AP_IP="$ip_address/24"
+                    AP_GW="$gateway"
+                    save_config "$debug"
+                    printf "Configuration saved successfully.\n"
+                    break
+                    ;;
+                [Nn])
+                    printf "Configuration was not saved.\n"
+                    break
+                    ;;
+                *)
+                    printf "Invalid choice. Please enter 'y' or 'n'.\n"
+                    ;;
+            esac
+        done
+    else
+        printf "Configuration validation failed.\n"
+    fi
+
+    debug_end "$debug"
+}
 
 ############
 ### Handle Configured Networks Functions
 ############
 
-# shellcheck disable=SC2317
-show_wifi_connection_details() {
-    # TODO - Do somethign with this
-    local connection_name="$1"
 
-    # Check if the connection name is provided
-    if [[ -z "$connection_name" ]]; then
-        echo "Error: Connection name is required." >&2
-        return 1
-    fi
-
-    # Fields to display
-    local fields=(
-        "connection.id"
-        "connection.interface-name"
-        "802-11-wireless.ssid"
-        "802-11-wireless-security.key-mgmt"
-        "802-11-wireless-security.psk"
-        "connection.autoconnect"
-        "connection.device"
-    )
-
-    # Create a comma-separated list of fields
-    local field_list
-    field_list=$(IFS=','; echo "${fields[*]}")
-
-    # Retrieve the selected fields
-    local details
-    details=$(nmcli -t -f "$field_list" connection show "$connection_name" 2>/dev/null)
-
-    # Check if nmcli succeeded
-    if [[ $? -ne 0 ]]; then
-        echo "Error: Unable to retrieve details for connection '$connection_name'." >&2
-        return 1
-    fi
-
-    # Display the details in a user-friendly format
-    echo "Details for connection '$connection_name':"
-    echo "-----------------------------------------"
-    echo "$details" | sed 's/:/: /g'
-    return 0
-}
-
-# -----------------------------------------------------------------------------
-# @brief Populate configured network data.
-# @details Extracts configured network profiles using nmcli, processes the
-#          TIMESTAMP-REAL field to replace escaped colons, and stores them
-#          in an indexed array for further operations.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-populate_configured_networks() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-
-    local network_info retval
-    # Retrieve only necessary fields excluding SSID
-    network_info=$(nmcli -t -f NAME,AUTOCONNECT,AUTOCONNECT-PRIORITY,ACTIVE,DEVICE,TYPE --color no connection show | grep -i ":802-11-wireless" 2>/dev/null)
-    retval=$?
-
-    if [[ $retval -ne 0 ]]; then
-        printf "%s\n" "Failed to return data from 'nmcli'." >&2
-        exit 1
-    fi
-
-    if [[ -z "$network_info" ]]; then
-        printf "%s\n" "No configured networks found." >&2
-        exit 0
-    fi
-
-    # Trim the last field ":802-11-wireless"
-    network_info="${network_info//:802-11-wireless/}"
-
-    # Replace escaped colons in TIMESTAMP-REAL with underscores
-    network_info="${network_info//\\:/_}"
-
-    # Build the final array with SSID inserted
-    local final_networks=()
-    while IFS=":" read -r name autoconnect priority active device; do
-        local ssid
-        # Retrieve SSID dynamically for each entry
-        ssid=$(nmcli -t -f 802-11-wireless.ssid connection show "$name" 2>/dev/null | cut -d':' -f2)
-        # Combine fields, inserting SSID after NAME
-        final_networks+=("$name:$ssid:$autoconnect:$priority:$active:$device")
-    done <<< "$network_info"
-
-    # Convert final_networks to the configured_networks array
-    configured_networks=("${final_networks[@]}")
-
-    debug_print "${configured_networks[*]}" >&2
-    debug_end "$debug"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Display configured networks in a formatted table.
-# @details Outputs a table of configured networks with selected columns and
-#          numeric index for user selection.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-display_configured_networks() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-
-    # Define the columns to display
-    local fields_to_display=(
-        "NAME"
-        "SSID"
-        "AUTOCONNECT"
-        "PRIORITY"
-        "ACTIVE"
-        "DEVICE"
-    )
-    local field_indices=(0 1 2 3 4 5)  # Indices now include SSID
-
-    if [[ ${#configured_networks[@]} -eq 0 ]]; then
-        printf "%s\n" "No configured networks found." >&2
-        exit 0
-    fi
-
-    # Calculate column widths based on field names
-    local num_fields=${#fields_to_display[@]}
-    local max_widths=()
-    for ((i = 0; i < num_fields; i++)); do
-        max_widths[i]=${#fields_to_display[i]}
-    done
-
-    # Adjust column widths based on data
-    for entry in "${configured_networks[@]}"; do
-        IFS=":" read -r -a fields <<<"$entry"
-        for ((i = 0; i < num_fields; i++)); do
-            local field_length=${#fields[i]}
-            if ((field_length > max_widths[i])); then
-                max_widths[i]=$field_length
-            fi
-        done
-    done
-
-    # Print header row
-    printf "%s%6s%s  " "$BOLD" "CHOICE" "$RESET"
-    for ((i = 0; i < num_fields; i++)); do
-        printf "%s%-*s%s  " "$BOLD" "${max_widths[i]}" "${fields_to_display[i]}" "$RESET"
-    done
-    printf "\n"
-
-    # Print data rows
-    local index=0
-    for entry in "${configured_networks[@]}"; do
-        IFS=":" read -r -a fields <<<"$entry"
-
-        # Wrap the index number with ${BOLD} and ${RESET}
-        printf "%s%6s%s  " "$BOLD" "$index" "$RESET"
-        for ((i = 0; i < num_fields; i++)); do
-            printf "%-*s  " "${max_widths[i]}" "${fields[i]}"
-        done
-        printf "\n"
-        ((index++))
-    done
-
-    # Add static menu items directly after the data rows without a blank line
-    printf "%s%6s%s  %s\n" "$BOLD" "C" "$RESET" "(C)reate a new connection"
-    printf "%s%6s%s  %s\n" "$BOLD" "P" "$RESET" "Change (P)riority"
-
-    printf "\n"
-    debug_end "$debug"
-}
-
-# -----------------------------------------------------------------------------
-# @brief Select a configured connection by index.
-# @details Prompts the user to select a network and returns the NAME field.
-#
-# @return The NAME of the selected network or blank for "0" or Enter.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-select_configured_network() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local choice
-
-    while :; do
-        read -rp "Select a connection by the choice column (or press Enter to exit): " choice
-
-        if [[ -z "$choice" ]]; then
-            # User pressed Enter without input, exit the loop
-            debug_end "$debug"
-            return
-        fi
-
-        if [[ "$choice" =~ ^[0-9]+$ ]] && ((choice >= 0 && choice < ${#configured_networks[@]})); then
-            # Numeric selection, return the corresponding network name
-            IFS=":" read -r -a selected_fields <<<"${configured_networks[$choice]}"
-            selected_fields[4]="${selected_fields[4]//_/\\:}"  # Convert TIMESTAMP-REAL back
-            printf "%s\n" "${selected_fields[0]}"
-            debug_end "$debug"
-            return
-        elif [[ "$choice" =~ ^[Cc]$ ]]; then
-            # "C" or "c" selected, return "c"
-            printf "c\n"
-            debug_end "$debug"
-            return
-        elif [[ "$choice" =~ ^[Pp]$ ]]; then
-            # "P" or "p" selected, return "p"
-            printf "p\n"
-            debug_end "$debug"
-            return
-        else
-            # Invalid input
-            printf "%s\n" "Invalid selection. Please enter a valid choice." >&2
-        fi
-    done
-}
-
-# -----------------------------------------------------------------------------
-# @brief Select a configured network.
-# @details Orchestrates the process of populating network data, displaying
-#          configured profiles, and allowing the user to select one. Optionally,
-#          prepares for subsequent actions with the selected NAME.
-#
-# @return The selected network NAME is output for further processing.
-# -----------------------------------------------------------------------------
-# shellcheck disable=SC2317
-wifi_client_config() {
-    local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
-    local selected_network
-
-    while :; do
-        clear
-        populate_configured_networks "$debug"
-        display_configured_networks "$debug"
-        selected_network=$(select_configured_network "$debug")
-
-        if [[ -z "$selected_network" ]]; then
-            # User pressed Enter without input, exit the loop
-            debug_end "$debug"
-            return
-        elif [[ "$selected_network" == "c" ]]; then
-            # TODO
-            printf "Creating a new connection\n"
-            pause
-        elif [[ "$selected_network" == "p" ]]; then
-            # TODO
-            printf "Changing Priority\n"
-            pause
-        elif [[ ${#selected_network} -gt 1 ]]; then
-            show_wifi_connection_details "$selected_network"
-            pause
-        else
-            printf "Invalid selection.\n"
-            pause
-        fi
-    done
-
-    debug_end "$debug"
-    return 0
-}
 
 ############
 ### AP Config Functions
@@ -3596,7 +3797,7 @@ save_config() {
         echo "# ${base_name}"
         echo "# Generated by save_config() on $(date)"
         echo "# Configuration for appop"
-        echo "WIFI_INTERFACE=\"$WIFI_INTERFACE\""             
+        echo "WIFI_INTERFACE=\"$WIFI_INTERFACE\""
         echo "AP_PROFILE_NAME=\"$AP_PROFILE_NAME\""
         echo "AP_SSID=\"$AP_SSID\""
         echo "AP_PASSWORD=\"$AP_PASSWORD\""
