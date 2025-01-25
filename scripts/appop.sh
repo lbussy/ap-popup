@@ -164,10 +164,26 @@ ensure_wifi_is_enabled() {
     fi
 }
 
-##
-# @brief Create a new AP profile using nmcli if it does not already exist.
+# -----------------------------------------------------------------------------
+# @brief Creates a new Access Point (AP) profile using nmcli.
+# @details This function configures an AP with the specified SSID, password,
+#          subnet, and gateway using the `nmcli` tool. The function sets up
+#          the IP range and ensures power-saving features are disabled for the
+#          WiFi interface.
 #
-# Sets up an AP with the configured SSID, password, IP range, and gateway.
+# @global WIFI_INTERFACE The WiFi interface to be used for the AP.
+# @global AP_PROFILE_NAME The name of the AP profile to create or modify.
+# @global AP_SSID The SSID for the AP.
+# @global AP_PASSWORD The password for the AP.
+# @global AP_IP The CIDR notation IP address for the AP (e.g., 192.168.50.5/24).
+# @global AP_GW The gateway IP address for the AP (e.g., 192.168.50.254).
+# @global GLOBAL_SAVED_AP_PROFILES Tracks the created AP profiles.
+#
+# @return None.
+#
+# @example
+#   create_ap_profile
+# -----------------------------------------------------------------------------
 create_ap_profile() {
     nmcli device wifi hotspot \
         ifname "$WIFI_INTERFACE" \
@@ -179,11 +195,14 @@ create_ap_profile() {
 
     nmcli connection modify "$AP_PROFILE_NAME" \
         ipv4.method shared \
-        ipv4.addr "$AP_IP" \
+        ipv4.addresses "$AP_IP" \
         ipv4.gateway "$AP_GW" \
         wifi.powersave disable
 
+    # Track the created profile globally
     GLOBAL_SAVED_AP_PROFILES+=("$AP_PROFILE_NAME")
+
+    # Reload nmcli configurations
     nmcli connection reload
 }
 
