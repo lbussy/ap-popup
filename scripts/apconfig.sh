@@ -413,14 +413,18 @@ debug_start() {
     done
 
     # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
+    local this_script
+    this_script=$(basename "${THIS_SCRIPT:-main}")
+    this_script="${this_script%.*}"
     local func_name="${FUNCNAME[1]:-main}"
     local caller_name="${FUNCNAME[2]:-main}"
     local caller_line=${BASH_LINENO[1]:-0}
+    local current_line=${BASH_LINENO[0]:-0}
 
     # Print debug information if the flag is set
     if [[ "$debug" == "debug" ]]; then
-        printf "[DEBUG in %s] Starting function %s() called by %s():%d.\n" \
-        "$THIS_SCRIPT" "$func_name" "$caller_name" "$caller_line" >&2
+        printf "[DEBUG]\t[%s:%s():%d] Starting function called by %s():%d.\n" \
+            "$this_script" "$func_name" "$current_line"  "$caller_name" "$caller_line" >&2
     fi
 
     # Return the debug flag if present, or an empty string if not
@@ -474,7 +478,7 @@ debug_print() {
     local debug=""
     local args=()  # Array to hold non-debug arguments
 
-    # Loop through all arguments and identify the "debug" flag
+    # Loop through all arguments to identify the "debug" flag
     for arg in "$@"; do
         if [[ "$arg" == "debug" ]]; then
             debug="debug"
@@ -487,6 +491,9 @@ debug_print() {
     set -- "${args[@]}"
 
     # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
+    local this_script
+    this_script=$(basename "${THIS_SCRIPT:-main}")
+    this_script="${this_script%.*}"
     local caller_name="${FUNCNAME[1]:-main}"
     local caller_line="${BASH_LINENO[0]:-0}"
 
@@ -495,8 +502,8 @@ debug_print() {
 
     # Print debug information if the debug flag is set
     if [[ "$debug" == "debug" ]]; then
-        printf "[DEBUG in %s] '%s' from %s():%d.\n" \
-        "$THIS_SCRIPT" "$message" "$caller_name" "$caller_line" >&2
+        printf "[DEBUG]\t[%s:%s:%d] '%s'.\n" \
+               "$this_script" "$caller_name" "$caller_line" "$message" >&2
     fi
 }
 
@@ -528,14 +535,18 @@ debug_end() {
     done
 
     # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
+    local this_script
+    this_script=$(basename "${THIS_SCRIPT:-main}")
+    this_script="${this_script%.*}"
     local func_name="${FUNCNAME[1]:-main}"
     local caller_name="${FUNCNAME[2]:-main}"
-    local caller_line="${BASH_LINENO[0]:-0}"
+    local caller_line=${BASH_LINENO[1]:-0}
+    local current_line=${BASH_LINENO[0]:-0}
 
-    # Print debug information if the debug flag is set
+    # Print debug information if the flag is set
     if [[ "$debug" == "debug" ]]; then
-        printf "[DEBUG in %s] Exiting function %s() called by %s():%d.\n" \
-        "$THIS_SCRIPT" "$func_name" "$caller_name" "$caller_line" >&2
+        printf "[DEBUG]\t[%s:%s():%d] Exiting function returning to %s():%d.\n" \
+            "$this_script" "$func_name" "$current_line"  "$caller_name" "$caller_line" >&2
     fi
 }
 
@@ -2753,7 +2764,8 @@ display_menu() {
         done
 
         # Read user choice
-        printf "\nEnter your choice (or press Enter to exit): "
+        printf "\n"
+        printf "Enter your choice (or press Enter to exit): "
         read -n 1 -sr choice < /dev/tty || true
         printf "\n"  # Add a newline after the choice for formatting
 
@@ -3021,7 +3033,8 @@ usage() {
     printf "%s version %s.\n" "$REPO_DISPLAY_NAME" "$sem_ver"
 
     # Print the usage with the correct script name
-    printf "\nUsage: %s [debug]\n\n" "$script_name" >&$output_redirect
+    printf "\n"
+    printf "Usage: %s [debug]\n\n" "$script_name" >&$output_redirect
 
     local max_flag_len=0
     for entry in "${OPTIONS_LIST[@]}"; do
@@ -3077,7 +3090,8 @@ update_ap_ssid() {
     printf "    %s\n" "- Must be 1-32 characters"
     printf "    %s\n" "- No leading or trailing spaces"
     printf "    %s\n" "- No embedded spaces"
-    printf "\nPress Enter to keep the current SSID.\n"
+    printf "\n"
+    printf "Press Enter to keep the current SSID.\n"
     printf "> "
 
     # Read the new SSID
@@ -3090,7 +3104,8 @@ update_ap_ssid() {
     if [[ -n "$new_ssid" ]]; then
         if [[ ${#new_ssid} -ge 1 && ${#new_ssid} -le 32 && "$new_ssid" =~ ^[[:graph:]]+$ ]]; then
             AP_SSID="$new_ssid"
-            printf "\nSSID updated to: %s\n" "$AP_SSID"
+            printf "\n"
+            printf "SSID updated to: %s\n" "$AP_SSID"
             debug_print "Valid SSID: '$new_ssid'" "$debug"
 
             # Confirmation loop to save the configuration
@@ -3112,11 +3127,13 @@ update_ap_ssid() {
                 esac
             done
         else
-            printf "\nInvalid SSID. Must be 1-32 printable characters with no leading/trailing spaces.\n"
+            printf "\n"
+            printf "Invalid SSID. Must be 1-32 printable characters with no leading/trailing spaces.\n"
             debug_print "Invalid SSID provided: '$new_ssid'" "$debug"
         fi
     else
-        printf "\nKeeping the current SSID: %s\n" "$AP_SSID"
+        printf "\n"
+        printf "Keeping the current SSID: %s\n" "$AP_SSID"
         debug_print "No change to SSID. Current SSID retained: '$AP_SSID'" "$debug"
     fi
     debug_end "$debug"
@@ -3149,7 +3166,8 @@ update_ap_password() {
     printf "    %s\n" "-- Must be 8-63 characters"
     printf "    %s\n" "-- No leading or trailing spaces"
     printf "    %s\n" "-- Printable characters only"
-    printf "\nPress Enter to keep the current password.\n"
+    printf "\n"
+    printf "Press Enter to keep the current password.\n"
     printf "> "
 
     # Read the new password
@@ -3183,11 +3201,13 @@ update_ap_password() {
                 esac
             done
         else
-            printf "\nInvalid password. Must be 8-63 printable characters with no leading/trailing spaces.\n"
+            printf "\n"
+            printf "Invalid password. Must be 8-63 printable characters with no leading/trailing spaces.\n"
             debug_print "Invalid password provided: '$new_pw'" "$debug"
         fi
     else
-        printf "\nKeeping the current password.\n"
+        printf "\n"
+        printf "Keeping the current password.\n"
         debug_print "No change to password. Current password retained: '$AP_PASSWORD'" "$debug"
     fi
     debug_end "$debug"
@@ -3450,7 +3470,8 @@ update_ap_ip() {
     clear
     printf "Current AP IP: %s\n" "$AP_IP"
     printf "Current AP GW: %s\n" "$AP_GW"
-    printf "\nSelect an IP address block (press Enter to exit):\n\n"
+    printf "\n"
+    printf "Select an IP address block (press Enter to exit):\n\n"
     printf "1   10.0.0.0/8\n"
     printf "2   172.16.0.0/12\n"
     printf "3   192.168.0.0/16\n\n"
@@ -3468,7 +3489,8 @@ update_ap_ip() {
         *) printf "Invalid choice.\n"; debug_end "$debug"; return 1 ;;
     esac
 
-    printf "\nConstruct an IP address for AP within the selected network.\n\n"
+    printf "\n"
+    printf "Construct an IP address for AP within the selected network.\n\n"
 
     # Prompt for the second octet
     while :; do
@@ -3521,7 +3543,8 @@ update_ap_ip() {
     gateway="$base_ip.$second_octet.$third_octet.254"
     # Validate and apply the configuration
     if validate_ap_configuration "$ip_network" "$gateway" "$debug"; then
-        printf "\nYour selected AP IP address: %s\n" "$ip_address"
+        printf "\n"
+        printf "Your selected AP IP address: %s\n" "$ip_address"
         printf "Your selected IP network: %s\n" "$ip_network"
         printf "Gateway for this network: %s\n" "$gateway"
 
@@ -3568,7 +3591,8 @@ live_switch() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Execute menu action
-    printf "\nRunning %s().\n" "${FUNCNAME[0]}"
+    printf "\n"
+    printf "Running %s().\n" "${FUNCNAME[0]}"
     pause "$debug"
 
     # Debug log: function exit
@@ -3581,7 +3605,8 @@ force_auto_negotiate() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Execute menu action
-    printf "\nRunning %s().\n" "${FUNCNAME[0]}"
+    printf "\n"
+    printf "Running %s().\n" "${FUNCNAME[0]}"
     pause
 
     # Debug log: function exit
@@ -3615,7 +3640,7 @@ upgrade_utility() {
 
 # TODO: Do we use this?
 update_hostname() {
-    # clear
+    clear
     local current_hostname
     current_hostname=$(nmcli general hostname)
 
@@ -3637,7 +3662,8 @@ update_hostname() {
             exec_command "Update shell session's HOSTNAME variable" "export HOSTNAME=$new_hostname"
             exec_command "Reload hostname-related services" "systemctl restart avahi-daemon"
 
-            printf "\n%s<< Hostname updated to:%s %s%s%s\n" \
+            printf "\n"
+            printf "%s<< Hostname updated to:%s %s%s%s\n" \
                 "$FGYLW" "$RESET" "$FGGRN" "$new_hostname" "$RESET"
         else
             printf "Invalid hostname. Please follow the hostname rules.\n" >&2
@@ -3686,7 +3712,8 @@ update_wifi_profile() {
     local existing_profile=""
     local connection_status=""
 
-    printf "\nConfiguring WiFi network: %s%s%s\n" "${FGYLW}" "${ssid}" "${RESET}"
+    printf "\n"
+    printf "Configuring WiFi network: %s%s%s\n" "${FGYLW}" "${ssid}" "${RESET}"
 
     # Check if a profile already exists for this SSID
     existing_profile=$(nmcli -t -f NAME con show | grep -F "$ssid")
@@ -3716,12 +3743,14 @@ update_wifi_profile() {
         fi
     else
         # No existing profile found, create a new one
-        printf "\nNo existing profile found for %s.\n" "$ssid"
+        printf "\n"
+        printf "No existing profile found for %s.\n" "$ssid"
         printf "%bEnter the password for the network (minimum 8 characters):%b\n" "${FGYLW}" "${RESET}"
         read -r password
 
         if [ -n "$password" ] && [ "${#password}" -ge 8 ]; then
-            printf "\nCreating a new profile and attempting to connect to %s.\n" "$ssid"
+            printf "\n"
+            printf "Creating a new profile and attempting to connect to %s.\n" "$ssid"
             connection_status=$(nmcli device wifi connect "$ssid" password "$password" 2>&1)
             local retval=$?
             if [ "$retval" -eq 0 ]; then

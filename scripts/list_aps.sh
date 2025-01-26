@@ -3,6 +3,113 @@ set -uo pipefail
 IFS=$'\n\t'
 set +o noclobber
 
+debug_start() {
+    local debug=""
+    local args=()  # Array to hold non-debug arguments
+
+    # Look for the "debug" flag in the provided arguments
+    for arg in "$@"; do
+        if [[ "$arg" == "debug" ]]; then
+            debug="debug"
+            break  # Exit the loop as soon as we find "debug"
+        fi
+    done
+
+    # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
+    local this_script
+    this_script=$(basename "${THIS_SCRIPT:-main}")
+    this_script="${this_script%.*}"
+    local func_name="${FUNCNAME[1]:-main}"
+    local caller_name="${FUNCNAME[2]:-main}"
+    local caller_line=${BASH_LINENO[1]:-0}
+    local current_line=${BASH_LINENO[0]:-0}
+
+    # Print debug information if the flag is set
+    if [[ "$debug" == "debug" ]]; then
+        printf "[DEBUG]\t[%s:%s():%d] Starting function called by %s():%d.\n" \
+            "$this_script" "$func_name" "$current_line"  "$caller_name" "$caller_line" >&2
+    fi
+
+    # Return the debug flag if present, or an empty string if not
+    printf "%s\n" "${debug:-}"
+    return 0
+}
+
+debug_filter() {
+    local args=()  # Array to hold non-debug arguments
+
+    # Iterate over each argument and exclude "debug"
+    for arg in "$@"; do
+        if [[ "$arg" != "debug" ]]; then
+            args+=("$arg")
+        fi
+    done
+
+    # Print the filtered arguments, safely quoting them for use in a command
+    printf "%q " "${args[@]}"
+}
+
+debug_print() {
+    local debug=""
+    local args=()  # Array to hold non-debug arguments
+
+    # Loop through all arguments to identify the "debug" flag
+    for arg in "$@"; do
+        if [[ "$arg" == "debug" ]]; then
+            debug="debug"
+        else
+            args+=("$arg")  # Add non-debug arguments to the array
+        fi
+    done
+
+    # Restore the positional parameters with the filtered arguments
+    set -- "${args[@]}"
+
+    # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
+    local this_script
+    this_script=$(basename "${THIS_SCRIPT:-main}")
+    this_script="${this_script%.*}"
+    local caller_name="${FUNCNAME[1]:-main}"
+    local caller_line="${BASH_LINENO[0]:-0}"
+
+    # Assign the remaining argument to the message, defaulting to <unset>
+    local message="${1:-<unset>}"
+
+    # Print debug information if the debug flag is set
+    if [[ "$debug" == "debug" ]]; then
+        printf "[DEBUG]\t[%s:%s:%d] '%s'.\n" \
+               "$this_script" "$caller_name" "$caller_line" "$message" >&2
+    fi
+}
+
+debug_end() {
+    local debug=""
+    local args=()  # Array to hold non-debug arguments
+
+    # Loop through all arguments and identify the "debug" flag
+    for arg in "$@"; do
+        if [[ "$arg" == "debug" ]]; then
+            debug="debug"
+            break  # Exit the loop as soon as we find "debug"
+        fi
+    done
+
+    # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
+    local this_script
+    this_script=$(basename "${THIS_SCRIPT:-main}")
+    this_script="${this_script%.*}"
+    local func_name="${FUNCNAME[1]:-main}"
+    local caller_name="${FUNCNAME[2]:-main}"
+    local caller_line=${BASH_LINENO[1]:-0}
+    local current_line=${BASH_LINENO[0]:-0}
+
+    # Print debug information if the flag is set
+    if [[ "$debug" == "debug" ]]; then
+        printf "[DEBUG]\t[%s:%s():%d] Exiting function returning to %s():%d.\n" \
+            "$this_script" "$func_name" "$current_line"  "$caller_name" "$caller_line" >&2
+    fi
+}
+
 default_color() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
@@ -72,102 +179,6 @@ init_colors() {
 
     debug_end "$debug"
     return 0
-}
-
-debug_start() {
-    local debug=""
-    local args=()  # Array to hold non-debug arguments
-
-    # Look for the "debug" flag in the provided arguments
-    for arg in "$@"; do
-        if [[ "$arg" == "debug" ]]; then
-            debug="debug"
-            break  # Exit the loop as soon as we find "debug"
-        fi
-    done
-
-    # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
-    local func_name="${FUNCNAME[1]:-main}"
-    local caller_name="${FUNCNAME[2]:-main}"
-    local caller_line=${BASH_LINENO[1]:-0}
-
-    # Print debug information if the flag is set
-    if [[ "$debug" == "debug" ]]; then
-        printf "[DEBUG in %s] Starting function %s() called by %s():%d.\n" \
-        "$THIS_SCRIPT" "$func_name" "$caller_name" "$caller_line" >&2
-    fi
-
-    # Return the debug flag if present, or an empty string if not
-    printf "%s\n" "${debug:-}"
-    return 0
-}
-
-debug_filter() {
-    local args=()  # Array to hold non-debug arguments
-
-    # Iterate over each argument and exclude "debug"
-    for arg in "$@"; do
-        if [[ "$arg" != "debug" ]]; then
-            args+=("$arg")
-        fi
-    done
-
-    # Print the filtered arguments, safely quoting them for use in a command
-    printf "%q " "${args[@]}"
-}
-
-debug_print() {
-    local debug=""
-    local args=()  # Array to hold non-debug arguments
-
-    # Loop through all arguments and identify the "debug" flag
-    for arg in "$@"; do
-        if [[ "$arg" == "debug" ]]; then
-            debug="debug"
-        else
-            args+=("$arg")  # Add non-debug arguments to the array
-        fi
-    done
-
-    # Restore the positional parameters with the filtered arguments
-    set -- "${args[@]}"
-
-    # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
-    local caller_name="${FUNCNAME[1]:-main}"
-    local caller_line="${BASH_LINENO[0]:-0}"
-
-    # Assign the remaining argument to the message, defaulting to <unset>
-    local message="${1:-<unset>}"
-
-    # Print debug information if the debug flag is set
-    if [[ "$debug" == "debug" ]]; then
-        printf "[DEBUG in %s] '%s' from %s():%d.\n" \
-        "$THIS_SCRIPT" "$message" "$caller_name" "$caller_line" >&2
-    fi
-}
-
-debug_end() {
-    local debug=""
-    local args=()  # Array to hold non-debug arguments
-
-    # Loop through all arguments and identify the "debug" flag
-    for arg in "$@"; do
-        if [[ "$arg" == "debug" ]]; then
-            debug="debug"
-            break  # Exit the loop as soon as we find "debug"
-        fi
-    done
-
-    # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
-    local func_name="${FUNCNAME[1]:-main}"
-    local caller_name="${FUNCNAME[2]:-main}"
-    local caller_line="${BASH_LINENO[0]:-0}"
-
-    # Print debug information if the debug flag is set
-    if [[ "$debug" == "debug" ]]; then
-        printf "[DEBUG in %s] Exiting function %s() called by %s():%d.\n" \
-        "$THIS_SCRIPT" "$func_name" "$caller_name" "$caller_line" >&2
-    fi
 }
 
 # -----------------------------------------------------------------------------
@@ -352,7 +363,8 @@ setup_wifi_network() {
 
     clear
     printf "%s%sAdd or modify a WiFi Network%s\n" "$FGYLW" "$BOLD" "$RESET"
-    printf "\nScanning for available WiFi networks, please wait.\n"
+    printf "\n"
+    printf "Scanning for available WiFi networks, please wait.\n"
 
     populate_wifi_networks "$debug"
     printf "%b%b" "$MOVE_UP" "$CLEAR_LINE"

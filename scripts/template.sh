@@ -90,7 +90,8 @@ trap_error() {
     fi
 
     # Log the error message to stderr
-    printf "\n[ERROR] Error in '%s()' at line %s of '%s'. Exiting.\n" \
+    printf "\n" >&2
+    printf "[ERROR] Error in '%s()' at line %s of '%s'. Exiting.\n" \
         "$func" "$line" "$script" >&2
 
     # Exit with a non-zero status code
@@ -794,14 +795,18 @@ debug_start() {
     done
 
     # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
+    local this_script
+    this_script=$(basename "${THIS_SCRIPT:-main}")
+    this_script="${this_script%.*}"
     local func_name="${FUNCNAME[1]:-main}"
     local caller_name="${FUNCNAME[2]:-main}"
     local caller_line=${BASH_LINENO[1]:-0}
+    local current_line=${BASH_LINENO[0]:-0}
 
     # Print debug information if the flag is set
     if [[ "$debug" == "debug" ]]; then
-        printf "[DEBUG in %s] Starting function %s() called by %s():%d.\n" \
-        "$THIS_SCRIPT" "$func_name" "$caller_name" "$caller_line" >&2
+        printf "[DEBUG]\t[%s:%s():%d] Starting function called by %s():%d.\n" \
+            "$this_script" "$func_name" "$current_line"  "$caller_name" "$caller_line" >&2
     fi
 
     # Return the debug flag if present, or an empty string if not
@@ -855,7 +860,7 @@ debug_print() {
     local debug=""
     local args=()  # Array to hold non-debug arguments
 
-    # Loop through all arguments and identify the "debug" flag
+    # Loop through all arguments to identify the "debug" flag
     for arg in "$@"; do
         if [[ "$arg" == "debug" ]]; then
             debug="debug"
@@ -868,6 +873,9 @@ debug_print() {
     set -- "${args[@]}"
 
     # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
+    local this_script
+    this_script=$(basename "${THIS_SCRIPT:-main}")
+    this_script="${this_script%.*}"
     local caller_name="${FUNCNAME[1]:-main}"
     local caller_line="${BASH_LINENO[0]:-0}"
 
@@ -876,8 +884,8 @@ debug_print() {
 
     # Print debug information if the debug flag is set
     if [[ "$debug" == "debug" ]]; then
-        printf "[DEBUG in %s] '%s' from %s():%d.\n" \
-        "$THIS_SCRIPT" "$message" "$caller_name" "$caller_line" >&2
+        printf "[DEBUG]\t[%s:%s:%d] '%s'.\n" \
+               "$this_script" "$caller_name" "$caller_line" "$message" >&2
     fi
 }
 
@@ -909,14 +917,18 @@ debug_end() {
     done
 
     # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
+    local this_script
+    this_script=$(basename "${THIS_SCRIPT:-main}")
+    this_script="${this_script%.*}"
     local func_name="${FUNCNAME[1]:-main}"
     local caller_name="${FUNCNAME[2]:-main}"
-    local caller_line="${BASH_LINENO[0]:-0}"
+    local caller_line=${BASH_LINENO[1]:-0}
+    local current_line=${BASH_LINENO[0]:-0}
 
-    # Print debug information if the debug flag is set
+    # Print debug information if the flag is set
     if [[ "$debug" == "debug" ]]; then
-        printf "[DEBUG in %s] Exiting function %s() called by %s():%d.\n" \
-        "$THIS_SCRIPT" "$func_name" "$caller_name" "$caller_line" >&2
+        printf "[DEBUG]\t[%s:%s():%d] Exiting function returning to %s():%d.\n" \
+            "$this_script" "$func_name" "$current_line"  "$caller_name" "$caller_line" >&2
     fi
 }
 
@@ -4164,7 +4176,8 @@ start_script() {
     fi
 
     # Prompt user for input
-    printf "\nStarting run for: %s.\n" "$(repo_to_title_case "${REPO_NAME:-Unknown}")"
+    printf "\n"
+    printf "Starting run for: %s.\n" "$(repo_to_title_case "${REPO_NAME:-Unknown}")"
     printf "Press any key to continue or 'Q' to quit (defaulting in 10 seconds).\n"
 
     # Read a single key with a 10-second timeout
@@ -4624,7 +4637,8 @@ option_one() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Execute menu action
-    printf "\nRunning %s().\n" "${FUNCNAME[0]}"
+    printf "\n"
+    printf "Running %s().\n" "${FUNCNAME[0]}"
     pause "$debug"
 
     # Debug log: function exit
@@ -4641,7 +4655,8 @@ option_two() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Execute menu action
-    printf "\nRunning %s().\n" "${FUNCNAME[0]}"
+    printf "\n"
+    printf "Running %s().\n" "${FUNCNAME[0]}"
     pause
 
     # Debug log: function exit
@@ -4658,7 +4673,8 @@ option_three() {
     local debug; debug=$(debug_start "$@"); eval set -- "$(debug_filter "$@")"
 
     # Execute menu action
-    printf "\nRunning %s().\n" "${FUNCNAME[0]}"
+    printf "\n"
+    printf "Running %s().\n" "${FUNCNAME[0]}"
     pause
 
     # Debug log: function exit
@@ -4701,7 +4717,8 @@ display_menu() {
     printf "%-4d%-30s\n" 0 "Exit"
 
     # Read user choice
-    printf "\nEnter your choice: "
+    printf "\n"
+    printf "Enter your choice: "
     read -n 1 -sr choice < /dev/tty || true
     printf "%s\n" "$choice"
 
@@ -4711,7 +4728,8 @@ display_menu() {
         return
     elif [[ "$choice" =~ ^[0-9]$ ]]; then
         if [[ "$choice" -eq 0 ]]; then
-            printf "\nExiting.\n"
+            printf "\n"
+            printf "Exiting.\n"
             debug_end "$debug"
             exit 0
         elif [[ "$choice" -ge 1 && "$choice" -lt "$i" ]]; then
@@ -5226,7 +5244,8 @@ usage() {
     script_name+=" ./$THIS_SCRIPT"
 
     # Print the usage with the correct script name
-    printf "\nUsage: %s [debug] <option1> [<option2> ...]\n\n" "$script_name" >&$output_redirect
+    printf "\n"
+    printf "Usage: %s [debug] <option1> [<option2> ...]\n\n" "$script_name" >&$output_redirect
 
     # Word Arguments section
     printf "Available Options\n\n" >&$output_redirect

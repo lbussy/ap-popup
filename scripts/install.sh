@@ -688,14 +688,18 @@ debug_start() {
     done
 
     # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
+    local this_script
+    this_script=$(basename "${THIS_SCRIPT:-main}")
+    this_script="${this_script%.*}"
     local func_name="${FUNCNAME[1]:-main}"
     local caller_name="${FUNCNAME[2]:-main}"
     local caller_line=${BASH_LINENO[1]:-0}
+    local current_line=${BASH_LINENO[0]:-0}
 
     # Print debug information if the flag is set
     if [[ "$debug" == "debug" ]]; then
-        printf "[DEBUG in %s] Starting function %s() called by %s():%d.\n" \
-        "$THIS_SCRIPT" "$func_name" "$caller_name" "$caller_line" >&2
+        printf "[DEBUG]\t[%s:%s():%d] Starting function called by %s():%d.\n" \
+            "$this_script" "$func_name" "$current_line"  "$caller_name" "$caller_line" >&2
     fi
 
     # Return the debug flag if present, or an empty string if not
@@ -749,7 +753,7 @@ debug_print() {
     local debug=""
     local args=()  # Array to hold non-debug arguments
 
-    # Loop through all arguments and identify the "debug" flag
+    # Loop through all arguments to identify the "debug" flag
     for arg in "$@"; do
         if [[ "$arg" == "debug" ]]; then
             debug="debug"
@@ -762,6 +766,9 @@ debug_print() {
     set -- "${args[@]}"
 
     # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
+    local this_script
+    this_script=$(basename "${THIS_SCRIPT:-main}")
+    this_script="${this_script%.*}"
     local caller_name="${FUNCNAME[1]:-main}"
     local caller_line="${BASH_LINENO[0]:-0}"
 
@@ -770,8 +777,8 @@ debug_print() {
 
     # Print debug information if the debug flag is set
     if [[ "$debug" == "debug" ]]; then
-        printf "[DEBUG in %s] %b from %s():%d.\n" \
-            "$THIS_SCRIPT" "$message" "$caller_name" "$caller_line" >&2
+        printf "[DEBUG]\t[%s:%s:%d] '%s'.\n" \
+               "$this_script" "$caller_name" "$caller_line" "$message" >&2
     fi
 }
 
@@ -803,14 +810,18 @@ debug_end() {
     done
 
     # Handle empty or unset FUNCNAME and BASH_LINENO gracefully
+    local this_script
+    this_script=$(basename "${THIS_SCRIPT:-main}")
+    this_script="${this_script%.*}"
     local func_name="${FUNCNAME[1]:-main}"
     local caller_name="${FUNCNAME[2]:-main}"
-    local caller_line="${BASH_LINENO[0]:-0}"
+    local caller_line=${BASH_LINENO[1]:-0}
+    local current_line=${BASH_LINENO[0]:-0}
 
-    # Print debug information if the debug flag is set
+    # Print debug information if the flag is set
     if [[ "$debug" == "debug" ]]; then
-        printf "[DEBUG in %s] Exiting function %s() called by %s():%d.\n" \
-        "$THIS_SCRIPT" "$func_name" "$caller_name" "$caller_line" >&2
+        printf "[DEBUG]\t[%s:%s():%d] Exiting function returning to %s():%d.\n" \
+            "$this_script" "$func_name" "$current_line"  "$caller_name" "$caller_line" >&2
     fi
 }
 
@@ -3380,7 +3391,8 @@ start_script() {
     fi
 
     # Prompt user for input
-    printf "\nStarting %s for: %s.\n" "$action_message" "$REPO_DISPLAY_NAME"
+    printf "\n"
+    printf "Starting %s for: %s.\n" "$action_message" "$REPO_DISPLAY_NAME"
     printf "Press any key to continue or 'Q' to quit (continuing install in 10 seconds).\n"
 
     # Read a single key with a 10-second timeout
